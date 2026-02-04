@@ -153,3 +153,20 @@ remediation: |
   user = db.execute(query)
   
   # ✅ GOOD - Secure authentication
+  from werkzeug.security import check_password_hash
+  
+  query = "SELECT * FROM users WHERE username=?"
+  user = db.execute(query, (username,)).fetchone()
+  
+  if user and check_password_hash(user['password_hash'], password):
+      # Successful authentication
+      session['user_id'] = user['id']
+  else:
+      # Failed authentication - generic error message
+      return "Invalid credentials"
+
+references:
+  - "https://owasp.org/www-project-top-ten/2017/A2_2017-Broken_Authentication"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+  - "https://portswigger.net/web-security/authentication"
+  - "https://owasp.org/www-community/attacks/SQL_Injection"
