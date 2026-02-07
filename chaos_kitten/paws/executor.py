@@ -59,7 +59,7 @@ class Executor:
         """Build request headers including authentication."""
         headers = {"User-Agent": "ChaosKitten/0.1.0"}
         
-        if self.auth_type == "bearer" and self.auth_token:
+        if self.auth_type in ("bearer", "oauth") and self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         elif self.auth_type == "basic" and self.auth_token:
             headers["Authorization"] = f"Basic {self.auth_token}"
@@ -88,46 +88,49 @@ class Executor:
             raise RuntimeError("Executor context not initialized. Use 'async with' block.")
 
         url = path.lstrip("/")
-        
+        max_retries = 2
         # Rate Limiting
         if self.rate_limit > 0:
             await asyncio.sleep(1.0 / self.rate_limit)
         
         # Merge headers
         # Start timing
-        start_time = time.time()
-        
-        try:
-            # Handle different payload types based on method usually, 
-            # but httpx handles 'json' or 'data' or 'params'
+        for attempt in range(max_retries + 1):
+            start_time = time.monotonic()
             
-            kwargs = {}
-            if headers:
-                kwargs["headers"] = headers
-            
-            if payload is not None:
-                if method.upper() in ["POST", "PUT", "PATCH"]:
-                    kwargs["json"] = payload
-                else:
-                    kwargs["params"] = payload
-                 
-            response = await self._client.request(method, url, **kwargs)
-            duration = time.time() - start_time
-            
-            return {
-                "status_code": response.status_code,
-                "response_body": response.text,
-                "duration": duration,
-                "headers": dict(response.headers),
-                "url": str(response.url)
-            }
-            
-        except httpx.RequestError as e:
-            duration = time.time() - start_time
-            return {
-                "status_code": 0,
-                "error": str(e),
-                "duration": duration,
-                "response_body": "",
-                "url": url
-            }
+            try:
+                # Handle different payload types based on method usually, 
+                # but httpx handles 'json' or 'data' or 'params'
+                
+                kwargs = {}
+                if headers:
+                    kwargs["headers"] = headers
+                
+                if payload is not None:
+                    if method.upper() in ["POST", "PUT", "PATCH"]:
+                        kwargs["json"] = payload
+                    else:
+                        kwargs["params"] = payload
+                    
+                response = await self._client.request(method, url, **kwargs)
+                elapsed_ms =  int((time.monotonic() - start_time) * 1000)
+                
+                return {
+                    "status_code": response.status_code,
+                    "response_body": response.text,
+                    "elapsed_ms": elapsed_ms,
+                    "headers": dict(response.headers),
+                    "url": str(response.url)
+                }
+                
+            except httpx.RequestError as e:
+                elapsed_ms = int((time.monotonic() - start_time) * 1000)
+                if attempt == max_retries:
+                    return {
+                        "status_code": 0,
+                        "error": str(e),
+                        "elapsed_ms": elapsed_ms,
+                        "response_body": "",
+                        "url": url
+                    }
+            await asyncio.sleep(0.5)
