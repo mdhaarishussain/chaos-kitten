@@ -103,12 +103,17 @@ jobs:
               comment += '📋 See the uploaded artifacts for the full report.\n';
             }
             
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (e) {
+              console.log('⚠️ Failed to post PR comment (likely due to fork permissions). Checking logs instead.');
+              console.log(e);
+            }
 
       - name: ❌ Fail if Critical Vulnerabilities
         if: steps.scan.outcome == 'failure'
