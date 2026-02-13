@@ -26,6 +26,7 @@ ASCII_CAT = r"""
 def version():
     """Show version information."""
     from chaos_kitten import __version__
+
     console.print(f"[bold magenta]Chaos Kitten[/bold magenta] v{__version__}")
 
 
@@ -71,10 +72,10 @@ reporting:
   include_poc: true
   include_remediation: true
 """'''
-    
+
     with open("chaos-kitten.yaml", "w") as f:
         f.write(config_template.strip('"""'))
-    
+
     console.print("[green]✓[/green] Created chaos-kitten.yaml")
     console.print("Edit the file with your target API details.")
 
@@ -142,22 +143,27 @@ def scan(
 
     # Check for API keys if using LLM providers
     import os
+
     if not os.getenv("ANTHROPIC_API_KEY") and not os.getenv("OPENAI_API_KEY"):
         console.print("[bold red]❌ I can't see![/bold red]")
-        console.print("I need an [bold]ANTHROPIC_API_KEY[/bold] or [bold]OPENAI_API_KEY[/bold] to plan my mischief.")
+        console.print(
+            "I need an [bold]ANTHROPIC_API_KEY[/bold] or [bold]OPENAI_API_KEY[/bold] to plan my mischief."
+        )
         console.print("[dim]Please set one in your environment or .env file.[/dim]")
-        
+
         if not demo:
             raise typer.Exit(code=1)
         else:
-            console.print("[yellow]⚠️  Proceeding anyway since we are in demo mode...[/yellow]")
-    
+            console.print(
+                "[yellow]⚠️  Proceeding anyway since we are in demo mode...[/yellow]"
+            )
 
     # Build configuration
     app_config = {}
-    
+
     # Try to load from file
     from chaos_kitten.utils.config import Config
+
     config_loader = Config(config)
     try:
         app_config = config_loader.load()
@@ -165,57 +171,73 @@ def scan(
         # It's okay if file doesn't exist AND we provided args
         if not target and not spec and not demo:
             console.print(f"[bold red]❌ Config file not found: {config}[/bold red]")
-            console.print("Run 'chaos-kitten init' or provide --target and --spec args.")
+            console.print(
+                "Run 'chaos-kitten init' or provide --target and --spec args."
+            )
             raise typer.Exit(code=1)
-            
+
     # CLI args override config
     if target:
-        if "target" not in app_config: app_config["target"] = {}
+        if "target" not in app_config:
+            app_config["target"] = {}
         app_config["target"]["base_url"] = target
         # Also support legacy api path for backward compat if needed, but prefer target
-        if "api" not in app_config: app_config["api"] = {}
+        if "api" not in app_config:
+            app_config["api"] = {}
         app_config["api"]["base_url"] = target
-        
+
     if spec:
-        if "target" not in app_config: app_config["target"] = {}
+        if "target" not in app_config:
+            app_config["target"] = {}
         app_config["target"]["openapi_spec"] = spec
         # Support legacy path
-        if "api" not in app_config: app_config["api"] = {}
+        if "api" not in app_config:
+            app_config["api"] = {}
         app_config["api"]["spec_path"] = spec
-        
+
     if output:
-        if "reporting" not in app_config: app_config["reporting"] = {}
+        if "reporting" not in app_config:
+            app_config["reporting"] = {}
         app_config["reporting"]["output_path"] = output
 
     if format:
-        if "reporting" not in app_config: app_config["reporting"] = {}
+        if "reporting" not in app_config:
+            app_config["reporting"] = {}
         app_config["reporting"]["format"] = format
 
     if provider:
-        if "agent" not in app_config: app_config["agent"] = {}
+        if "agent" not in app_config:
+            app_config["agent"] = {}
         app_config["agent"]["llm_provider"] = provider
 
     # Run the orchestrator
     from chaos_kitten.brain.orchestrator import Orchestrator
+
     orchestrator = Orchestrator(app_config)
     try:
         import asyncio
+
         results = asyncio.run(orchestrator.run())
 
         # Check for orchestrator runtime errors
         if isinstance(results, dict) and results.get("status") == "failed":
-            console.print(f"[bold red]❌ Scan failed:[/bold red] {results.get('error')}")
+            console.print(
+                f"[bold red]❌ Scan failed:[/bold red] {results.get('error')}"
+            )
             raise typer.Exit(code=1)
 
         # Handle --fail-on-critical
         if fail_on_critical:
             vulnerabilities = results.get("vulnerabilities", [])
             critical_vulns = [
-                v for v in vulnerabilities 
+                v
+                for v in vulnerabilities
                 if str(v.get("severity", "")).lower() == "critical"
             ]
             if critical_vulns:
-                console.print(f"[bold red]❌ Found {len(critical_vulns)} critical vulnerabilities. Failing pipeline.[/bold red]")
+                console.print(
+                    f"[bold red]❌ Found {len(critical_vulns)} critical vulnerabilities. Failing pipeline.[/bold red]"
+                )
                 raise typer.Exit(code=1)
 
     except typer.Exit:
@@ -226,11 +248,14 @@ def scan(
         # console.print(traceback.format_exc())
         raise typer.Exit(code=1)
 
+
 @app.command()
 def meow():
     """🐱 Meow!"""
     console.print(Panel(ASCII_CAT, title="🐱 Meow!", border_style="magenta"))
-    console.print("[italic]I'm going to knock some vulnerabilities off your API table![/italic]")
+    console.print(
+        "[italic]I'm going to knock some vulnerabilities off your API table![/italic]"
+    )
 
 
 if __name__ == "__main__":

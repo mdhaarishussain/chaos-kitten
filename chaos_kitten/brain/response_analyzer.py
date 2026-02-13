@@ -1,8 +1,7 @@
-
+import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
-import re
+
 
 class Severity(Enum):
     CRITICAL = "critical"
@@ -10,6 +9,7 @@ class Severity(Enum):
     MEDIUM = "medium"
     LOW = "low"
     INFO = "info"
+
 
 @dataclass
 class VulnerabilityFinding:
@@ -21,10 +21,11 @@ class VulnerabilityFinding:
     payload_used: str
     remediation: str
 
+
 class ResponseAnalyzer:
     def __init__(self) -> None:
         self.patterns = self._load_patterns()
-    
+
     def _load_patterns(self) -> dict[str, list[str]]:
         """Load regex patterns for vulnerability detection."""
         return {
@@ -58,21 +59,21 @@ class ResponseAnalyzer:
                 r"\/bin\/bash",
                 r"win\.ini",
                 r"system\.ini",
-            ]
+            ],
         }
 
     def analyze(
-        self, 
-        response_body: str, 
-        status_code: int, 
+        self,
+        response_body: str,
+        status_code: int,
         response_time_ms: float,
         payload_used: str,
         endpoint: str = "",
-        attack_type: str = "unknown"
-    ) -> Optional[VulnerabilityFinding]:
+        attack_type: str = "unknown",
+    ) -> VulnerabilityFinding | None:
         """
         Analyze an HTTP response for vulnerability indicators.
-        
+
         Returns a VulnerabilityFinding if a vulnerability is detected,
         None otherwise.
         """
@@ -86,7 +87,7 @@ class ResponseAnalyzer:
                 evidence="Database error message detected in response",
                 endpoint=endpoint,
                 payload_used=payload_used,
-                remediation="Use parameterized queries (prepared statements) to prevent SQL injection."
+                remediation="Use parameterized queries (prepared statements) to prevent SQL injection.",
             )
 
         # 2. Check for XSS Reflection
@@ -99,9 +100,9 @@ class ResponseAnalyzer:
                 evidence=f"Payload reflected in response: {payload_used}",
                 endpoint=endpoint,
                 payload_used=payload_used,
-                remediation="Implement context-aware output encoding and valid input validation."
+                remediation="Implement context-aware output encoding and valid input validation.",
             )
-            
+
         # 3. Check for Path Traversal
         is_pt, pt_confidence = self.detect_path_traversal(response_body)
         if is_pt:
@@ -112,40 +113,40 @@ class ResponseAnalyzer:
                 evidence="System file content detected in response",
                 endpoint=endpoint,
                 payload_used=payload_used,
-                remediation="Validate user input against a strict allowlist and do not use input directly in file paths."
+                remediation="Validate user input against a strict allowlist and do not use input directly in file paths.",
             )
 
         # 4. Check for Timing Attacks (Basic)
         # Assuming a baseline or checking if response time is significantly high > 5000ms for this example
         if response_time_ms > 5000:
-             return VulnerabilityFinding(
+            return VulnerabilityFinding(
                 vulnerability_type="Potential Timing Attack / DoS",
                 severity=Severity.MEDIUM,
                 confidence=0.6,
                 evidence=f"Response time unusually high: {response_time_ms}ms",
                 endpoint=endpoint,
                 payload_used=payload_used,
-                remediation="Limit processing time and ensure efficient query execution."
+                remediation="Limit processing time and ensure efficient query execution.",
             )
 
         return None
-    
-    def detect_sql_injection(self, response: str) -> Tuple[bool, float]:
+
+    def detect_sql_injection(self, response: str) -> tuple[bool, float]:
         """Check for SQL error messages indicating injection."""
         for pattern in self.patterns["sql_injection"]:
             if re.search(pattern, response, re.IGNORECASE):
                 return True, 1.0
         return False, 0.0
-    
-    def detect_xss_reflection(self, response: str, payload: str) -> Tuple[bool, float]:
+
+    def detect_xss_reflection(self, response: str, payload: str) -> tuple[bool, float]:
         """Check if XSS payload is reflected in response."""
         # Simple check: is the payload strictly present in the response?
         # A more advanced check would verify if it's executable (e.g., inside <script> tags or attrs)
         if payload and payload in response:
             return True, 0.9
         return False, 0.0
-    
-    def detect_path_traversal(self, response: str) -> Tuple[bool, float]:
+
+    def detect_path_traversal(self, response: str) -> tuple[bool, float]:
         """Check for file content indicators."""
         for pattern in self.patterns["path_traversal"]:
             if re.search(pattern, response, re.IGNORECASE):

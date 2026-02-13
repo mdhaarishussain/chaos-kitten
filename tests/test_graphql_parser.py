@@ -1,10 +1,13 @@
 """Tests for the GraphQL Parser."""
 
 import json
-import pytest
 from unittest.mock import MagicMock, patch
+
 import httpx
+import pytest
+
 from chaos_kitten.brain.graphql_parser import GraphQLParser
+
 
 class TestGraphQLParser:
     """Tests for GraphQLParser."""
@@ -27,12 +30,19 @@ class TestGraphQLParser:
                                     "args": [
                                         {
                                             "name": "id",
-                                            "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "SCALAR", "name": "ID"}}
+                                            "type": {
+                                                "kind": "NON_NULL",
+                                                "name": None,
+                                                "ofType": {
+                                                    "kind": "SCALAR",
+                                                    "name": "ID",
+                                                },
+                                            },
                                         }
                                     ],
-                                    "type": {"kind": "OBJECT", "name": "User"}
+                                    "type": {"kind": "OBJECT", "name": "User"},
                                 }
-                            ]
+                            ],
                         },
                         {
                             "kind": "OBJECT",
@@ -43,22 +53,35 @@ class TestGraphQLParser:
                                     "args": [
                                         {
                                             "name": "username",
-                                            "type": {"kind": "NON_NULL", "name": None, "ofType": {"kind": "SCALAR", "name": "String"}}
+                                            "type": {
+                                                "kind": "NON_NULL",
+                                                "name": None,
+                                                "ofType": {
+                                                    "kind": "SCALAR",
+                                                    "name": "String",
+                                                },
+                                            },
                                         }
                                     ],
-                                    "type": {"kind": "OBJECT", "name": "User"}
+                                    "type": {"kind": "OBJECT", "name": "User"},
                                 }
-                            ]
+                            ],
                         },
-                         {
+                        {
                             "kind": "OBJECT",
                             "name": "User",
                             "fields": [
-                                {"name": "id", "type": {"kind": "SCALAR", "name": "ID"}},
-                                {"name": "username", "type": {"kind": "SCALAR", "name": "String"}}
-                            ]
-                        }
-                    ]
+                                {
+                                    "name": "id",
+                                    "type": {"kind": "SCALAR", "name": "ID"},
+                                },
+                                {
+                                    "name": "username",
+                                    "type": {"kind": "SCALAR", "name": "String"},
+                                },
+                            ],
+                        },
+                    ],
                 }
             }
         }
@@ -76,24 +99,26 @@ class TestGraphQLParser:
 
         assert schema == mock_introspection_response["data"]
         mock_post.assert_called_once()
-    
+
     @patch("httpx.post")
     def test_introspect_failure(self, mock_post):
         """Test introspection failure handling."""
         mock_post.side_effect = httpx.RequestError("Network error")
         parser = GraphQLParser(endpoint_url="http://example.com/graphql")
-        
+
         with pytest.raises(httpx.RequestError):
             parser.introspect()
 
     def test_parse_schema_json(self, mock_introspection_response):
         """Test parsing a local JSON schema file."""
-        import json
+
         json_content = json.dumps(mock_introspection_response["data"])
-        
-        with patch("pathlib.Path.read_text", return_value=json_content), \
-             patch("pathlib.Path.exists", return_value=True):
-            
+
+        with (
+            patch("pathlib.Path.read_text", return_value=json_content),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+
             parser = GraphQLParser(schema_path="schema.json")
             schema = parser.parse_schema()
             assert schema["__schema"]["queryType"]["name"] == "RootQuery"
@@ -103,11 +128,11 @@ class TestGraphQLParser:
         parser = GraphQLParser(endpoint_url="http://example.com/api/graphql")
         # Manually set schema to avoid introspection call
         parser.schema = mock_introspection_response["data"]
-        
+
         endpoints = parser.to_endpoints()
-        
+
         assert len(endpoints) == 2
-        
+
         # Check Mutation
         mutation = next(e for e in endpoints if "createUser" in e["operation"])
         assert mutation["path"] == "/api/graphql"
@@ -131,8 +156,7 @@ class TestGraphQLParser:
         # Test Non-Null
         type_ref = {"kind": "NON_NULL", "ofType": {"kind": "SCALAR", "name": "Int"}}
         assert parser._resolve_type_name(type_ref) == "Int!"
-        
+
         # Test Simple
         type_ref = {"kind": "SCALAR", "name": "Boolean", "ofType": None}
         assert parser._resolve_type_name(type_ref) == "Boolean"
-

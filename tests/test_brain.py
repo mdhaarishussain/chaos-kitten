@@ -1,16 +1,18 @@
 """Tests for the Brain module."""
 
 import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from chaos_kitten.brain.openapi_parser import OpenAPIParser
 from chaos_kitten.brain.orchestrator import Orchestrator
 
 
 class TestOrchestrator:
     """Tests for the Orchestrator."""
-    
+
     @pytest.mark.asyncio
     @patch("chaos_kitten.brain.orchestrator.OpenAPIParser")
     @patch("chaos_kitten.brain.orchestrator.AttackPlanner")
@@ -18,38 +20,35 @@ class TestOrchestrator:
     @patch("chaos_kitten.brain.orchestrator.Reporter")
     @patch("chaos_kitten.brain.orchestrator.ResponseAnalyzer")
     async def test_orchestrator_run_flow(
-        self, 
-        MockAnalyzer, 
-        MockReporter, 
-        MockExecutor, 
-        MockPlanner, 
-        MockParser, 
-        tmp_path
+        self,
+        MockAnalyzer,
+        MockReporter,
+        MockExecutor,
+        MockPlanner,
+        MockParser,
+        tmp_path,
     ):
         """Test that orchestrator initializes correctly and runs a scan."""
-        
+
         # Setup mocks
         config = {
-            "target": {
-                "base_url": "http://test.com",
-                "openapi_spec": "spec.json"
-            },
+            "target": {"base_url": "http://test.com", "openapi_spec": "spec.json"},
             "executor": {"rate_limit": 10},
-            "reporting": {"output_path": str(tmp_path), "format": "json"}
+            "reporting": {"output_path": str(tmp_path), "format": "json"},
         }
-        
+
         # Mock Parser
         parser_instance = MockParser.return_value
         parser_instance.get_endpoints.return_value = [
             {"method": "GET", "path": "/users"}
         ]
-        
+
         # Mock Planner
         planner_instance = MockPlanner.return_value
         planner_instance.plan_attacks.return_value = [
             {"type": "sql_injection", "name": "SQLi Test", "payload": "' OR 1=1 --"}
         ]
-        
+
         # Mock Executor
         executor_instance = AsyncMock()
         MockExecutor.return_value.__aenter__.return_value = executor_instance
@@ -58,9 +57,9 @@ class TestOrchestrator:
             "response_body": "SQL Syntax Error",
             "duration": 0.1,
             "headers": {},
-            "url": "http://test.com/users"
+            "url": "http://test.com/users",
         }
-        
+
         # Mock Analyzer
         finding = MagicMock()
         finding.vulnerability_type = "SQL Injection"
@@ -72,28 +71,26 @@ class TestOrchestrator:
 
         analyzer_instance = MockAnalyzer.return_value
         analyzer_instance.analyze.return_value = finding
-        
+
         # Mock Reporter
         reporter_instance = MockReporter.return_value
         reporter_instance.generate.return_value = Path("report.json")
-        
+
         # Run Orchestrator
         orchestrator = Orchestrator(config)
         results = await orchestrator.run()
-        
+
         # Assertions
         assert results["summary"]["total_endpoints"] == 1
         assert results["summary"]["tested_endpoints"] == 1
         assert len(results["vulnerabilities"]) == 1
         assert results["vulnerabilities"][0]["type"] == "SQL Injection"
-        
+
         # Verify calls
         parser_instance.parse.assert_called_once()
         planner_instance.plan_attacks.assert_called()
         executor_instance.execute_attack.assert_called_with(
-            method="GET",
-            path="/users",
-            payload="' OR 1=1 --"
+            method="GET", path="/users", payload="' OR 1=1 --"
         )
         reporter_instance.generate.assert_called_once()
 
@@ -117,35 +114,47 @@ class TestOpenAPIParser:
                     "get": {
                         "operationId": "getUsers",
                         "summary": "List users",
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     },
                     "post": {
                         "operationId": "createUser",
                         "requestBody": {
                             "content": {
                                 "application/json": {
-                                    "schema": {"type": "object", "properties": {"name": {"type": "string"}}}
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {"name": {"type": "string"}},
+                                    }
                                 }
                             }
                         },
-                        "responses": {"201": {"description": "Created"}}
-                    }
+                        "responses": {"201": {"description": "Created"}},
+                    },
                 },
                 "/users/{id}": {
                     "parameters": [
-                        {"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "integer"},
+                        }
                     ],
                     "get": {
                         "operationId": "getUserById",
-                        "responses": {"200": {"description": "OK"}}
-                    }
-                }
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
             },
             "components": {
                 "securitySchemes": {
-                    "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+                    "ApiKeyAuth": {
+                        "type": "apiKey",
+                        "in": "header",
+                        "name": "X-API-Key",
+                    }
                 }
-            }
+            },
         }
         file_path = tmp_path / "openapi_3.json"
         file_path.write_text(json.dumps(spec_content))
@@ -164,12 +173,17 @@ class TestOpenAPIParser:
                 "/products": {
                     "get": {
                         "operationId": "listProducts",
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     }
                 },
                 "/products/{id}": {
                     "parameters": [
-                        {"name": "id", "in": "path", "required": True, "type": "integer"}
+                        {
+                            "name": "id",
+                            "in": "path",
+                            "required": True,
+                            "type": "integer",
+                        }
                     ],
                     "put": {
                         "operationId": "updateProduct",
@@ -177,16 +191,17 @@ class TestOpenAPIParser:
                             {
                                 "in": "body",
                                 "name": "body",
-                                "schema": {"type": "object", "properties": {"name": {"type": "string"}}}
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"name": {"type": "string"}},
+                                },
                             }
                         ],
-                        "responses": {"200": {"description": "OK"}}
-                    }
-                }
+                        "responses": {"200": {"description": "OK"}},
+                    },
+                },
             },
-            "securityDefinitions": {
-                "BasicAuth": {"type": "basic"}
-            }
+            "securityDefinitions": {"BasicAuth": {"type": "basic"}},
         }
         file_path = tmp_path / "swagger_2.json"
         file_path.write_text(json.dumps(spec_content))
@@ -240,7 +255,9 @@ class TestOpenAPIParser:
         parser = OpenAPIParser(malformed_file)
         with pytest.raises(ValueError) as excinfo:
             parser.parse()
-        assert "Invalid OpenAPI spec" in str(excinfo.value) or "Failed to parse" in str(excinfo.value)
+        assert "Invalid OpenAPI spec" in str(excinfo.value) or "Failed to parse" in str(
+            excinfo.value
+        )
 
     def test_parse_unknown_version(self, invalid_spec_file):
         """Test parsing a JSON file that is not OpenAPI/Swagger."""
@@ -248,8 +265,10 @@ class TestOpenAPIParser:
         with pytest.raises(ValueError) as excinfo:
             parser.parse()
         err_msg = str(excinfo.value)
-        assert "Missing 'openapi' or 'swagger' field" in err_msg or \
-               "Could not determine specification schema version" in err_msg
+        assert (
+            "Missing 'openapi' or 'swagger' field" in err_msg
+            or "Could not determine specification schema version" in err_msg
+        )
 
     def test_parse_openapi_3_success(self, openapi_3_spec):
         """Test successful parsing of OpenAPI 3 spec."""
@@ -271,19 +290,19 @@ class TestOpenAPIParser:
         """Test endpoint extraction for OpenAPI 3."""
         parser = OpenAPIParser(openapi_3_spec)
         endpoints = parser.get_endpoints()
-        
+
         # We expect 3 endpoints: GET /users, POST /users, GET /users/{id}
         assert len(endpoints) == 3
-        
+
         # Verify specific endpoint details
         get_user = next(ep for ep in endpoints if ep["operationId"] == "getUsers")
         assert get_user["method"] == "GET"
         assert get_user["path"] == "/users"
-        
+
         post_user = next(ep for ep in endpoints if ep["operationId"] == "createUser")
         assert post_user["method"] == "POST"
         assert "requestBody" in post_user
-        
+
         get_user_id = next(ep for ep in endpoints if ep["operationId"] == "getUserById")
         # Check path parameter normalization
         assert len(get_user_id["parameters"]) == 1
@@ -294,13 +313,20 @@ class TestOpenAPIParser:
         """Test endpoint extraction and normalization for Swagger 2."""
         parser = OpenAPIParser(swagger_2_spec)
         endpoints = parser.get_endpoints()
-        
+
         assert len(endpoints) == 2
-        
-        update_prod = next(ep for ep in endpoints if ep["operationId"] == "updateProduct")
+
+        update_prod = next(
+            ep for ep in endpoints if ep["operationId"] == "updateProduct"
+        )
         # Check body parameter normalization to requestBody
         assert "requestBody" in update_prod
-        assert update_prod["requestBody"]["content"]["application/json"]["schema"]["properties"]["name"]["type"] == "string"
+        assert (
+            update_prod["requestBody"]["content"]["application/json"]["schema"][
+                "properties"
+            ]["name"]["type"]
+            == "string"
+        )
 
     def test_swagger_formdata_normalization(self, tmp_path):
         """Test Swagger 2.0 formData parameters normalize to requestBody."""
@@ -313,13 +339,23 @@ class TestOpenAPIParser:
                     "post": {
                         "operationId": "uploadFile",
                         "parameters": [
-                            {"name": "file", "in": "formData", "required": True, "type": "file"},
-                            {"name": "description", "in": "formData", "required": False, "type": "string"}
+                            {
+                                "name": "file",
+                                "in": "formData",
+                                "required": True,
+                                "type": "file",
+                            },
+                            {
+                                "name": "description",
+                                "in": "formData",
+                                "required": False,
+                                "type": "string",
+                            },
                         ],
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     }
                 }
-            }
+            },
         }
         file_path = tmp_path / "swagger_formdata.json"
         file_path.write_text(json.dumps(spec_content))
@@ -343,7 +379,7 @@ class TestOpenAPIParser:
         get_eps = parser.get_endpoints(methods=["GET"])
         assert len(get_eps) == 2
         assert all(ep["method"] == "GET" for ep in get_eps)
-        
+
         # Case insensitive
         get_eps_lower = parser.get_endpoints(methods=["get"])
         assert len(get_eps_lower) == 2
@@ -358,17 +394,17 @@ class TestOpenAPIParser:
                     "get": {
                         "operationId": "getPublic",
                         "tags": ["public"],
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     }
                 },
                 "/admin": {
                     "get": {
                         "operationId": "getAdmin",
                         "tags": ["admin"],
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     }
-                }
-            }
+                },
+            },
         }
         file_path = tmp_path / "openapi_tags.json"
         file_path.write_text(json.dumps(spec_content))
@@ -393,19 +429,17 @@ class TestOpenAPIParser:
             "servers": [
                 {
                     "url": "https://{environment}.example.com",
-                    "variables": {
-                        "environment": {"default": "api"}
-                    }
+                    "variables": {"environment": {"default": "api"}},
                 }
             ],
             "paths": {
                 "/health": {
                     "get": {
                         "operationId": "getHealth",
-                        "responses": {"200": {"description": "OK"}}
+                        "responses": {"200": {"description": "OK"}},
                     }
                 }
-            }
+            },
         }
         file_path = tmp_path / "openapi_servers.json"
         file_path.write_text(json.dumps(spec_content))
@@ -427,7 +461,7 @@ class TestOpenAPIParser:
         schemes_3 = parser_3.get_security_schemes()
         assert "ApiKeyAuth" in schemes_3
         assert schemes_3["ApiKeyAuth"]["type"] == "apiKey"
-        
+
         # Swagger 2
         parser_2 = OpenAPIParser(swagger_2_spec)
         schemes_2 = parser_2.get_security_schemes()
@@ -440,11 +474,11 @@ class TestOpenAPIParser:
         """Integration test with the provided sample file."""
         if real_world_spec_path is None:
             return
-            
+
         parser = OpenAPIParser(real_world_spec_path)
         parser.parse()
         endpoints = parser.get_endpoints()
-        
+
         assert len(endpoints) > 0
         assert parser.version is not None
         # Basic sanity check regarding structure
@@ -456,12 +490,12 @@ class TestOpenAPIParser:
 
 class TestAttackPlanner:
     """Tests for the attack planner."""
-    
+
     def test_load_attack_profiles(self):
         """Test loading attack profiles from toys/."""
         # TODO: Implement test
         pass
-    
+
     def test_plan_attacks_for_login_endpoint(self):
         """Test attack planning for a login endpoint."""
         # TODO: Implement test
