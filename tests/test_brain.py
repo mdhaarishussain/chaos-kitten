@@ -71,6 +71,11 @@ class TestOrchestrator:
 
         analyzer_instance = MockAnalyzer.return_value
         analyzer_instance.analyze.return_value = finding
+        analyzer_instance.analyze_error_messages.return_value = {
+            "error_category": "sql_injection",
+            "confidence": 1.0,
+            "indicators": ["sql syntax"],
+        }
 
         # Mock Reporter
         reporter_instance = MockReporter.return_value

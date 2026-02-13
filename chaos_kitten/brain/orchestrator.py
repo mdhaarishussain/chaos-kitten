@@ -101,8 +101,13 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
         else:
             payload_used = str(payload_obj)
 
+        # Analyze error messages
+        analysis = analyzer.analyze_error_messages(result)
+        if analysis.get("confidence", 0) > 0:
+            logger.info("Error analysis for %s: %s", endpoint.get("path"), analysis)
+
         finding = analyzer.analyze(
-            response_body=result.get("response_body", ""),
+            response_body=result.get("body", ""),
             status_code=result.get("status_code", 0),
             response_time_ms=result.get("elapsed_ms", 0),
             payload_used=payload_used,

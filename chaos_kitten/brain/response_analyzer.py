@@ -1,6 +1,40 @@
+import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+ERROR_PATTERNS = {
+    "sql_injection": [
+        "sql syntax",
+        "mysql_fetch",
+        "ora-",
+        "sqlstate",
+        "postgresql",
+    ],
+    "nosql_injection": [
+        "mongo",
+        "undefined",
+        "cannot read property",
+    ],
+    "command_injection": [
+        "command not found",
+        "syntax error",
+        "no such file or directory",
+    ],
+    "xxe": [
+        "doctype",
+        "entity",
+        "xml",
+        "fatal error",
+    ],
+    "path_traversal": [
+        "permission denied",
+        "file not readable",
+        "no such file",
+    ],
+}
 
 
 class Severity(Enum):
@@ -137,6 +171,44 @@ class ResponseAnalyzer:
             if re.search(pattern, response, re.IGNORECASE):
                 return True, 1.0
         return False, 0.0
+
+    def analyze_error_messages(self, response: dict) -> dict:
+        body = str(response.get("body", "")).lower()
+
+        if not body:
+            return {
+                "error_category": None,
+                "confidence": 0.0,
+                "indicators": [],
+            }
+
+        matches = {}
+
+        for category, patterns in ERROR_PATTERNS.items():
+            found = [p for p in patterns if p in body]
+            if found:
+                matches[category] = found
+
+        if not matches:
+            return {
+                "error_category": None,
+                "confidence": 0.0,
+                "indicators": [],
+            }
+
+        # pick category with most matches
+        category = max(matches, key=lambda k: len(matches[k]))
+        indicators = matches[category]
+
+        confidence = min(1.0, len(indicators) / 3)
+
+        logger.info(f"Detected {category} indicators: {indicators}")
+
+        return {
+            "error_category": category,
+            "confidence": confidence,
+            "indicators": indicators,
+        }
 
     def detect_xss_reflection(self, response: str, payload: str) -> tuple[bool, float]:
         """Check if XSS payload is reflected in response."""

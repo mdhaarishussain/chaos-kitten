@@ -1,7 +1,6 @@
 """Tests for the Litterbox module."""
 
 
-
 class TestReporter:
     """Tests for the report generator."""
 

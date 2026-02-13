@@ -81,3 +81,46 @@ def test_timing_attack_detection(analyzer):
     assert finding is not None
     assert finding.vulnerability_type == "Potential Timing Attack / DoS"
     assert finding.severity == Severity.MEDIUM
+
+
+def test_sql_injection_detection(analyzer):
+    response = {"body": "You have an SQL syntax error near mysql_fetch"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["error_category"] == "sql_injection"
+    assert result["confidence"] > 0
+
+
+def test_nosql_detection(analyzer):
+    response = {"body": "mongo undefined property error"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["error_category"] == "nosql_injection"
+
+
+def test_command_injection(analyzer):
+    response = {"body": "command not found: ls"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["error_category"] == "command_injection"
+
+
+def test_xxe(analyzer):
+    response = {"body": "DOCTYPE entity xml fatal error"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["error_category"] == "xxe"
+
+
+def test_path_traversal(analyzer):
+    response = {"body": "Permission denied reading file"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["error_category"] == "path_traversal"
+
+
+def test_no_error(analyzer):
+    response = {"body": "Everything OK"}
+    result = analyzer.analyze_error_messages(response)
+
+    assert result["confidence"] == 0.0
