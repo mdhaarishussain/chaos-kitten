@@ -19,7 +19,8 @@ from chaos_kitten.brain.attack_planner import AttackPlanner
 
 # Internal Chaos Kitten imports
 from chaos_kitten.brain.openapi_parser import OpenAPIParser
-from chaos_kitten.brain.response_analyzer import ResponseAnalyzer
+# from chaos_kitten.brain.response_analyzer import ResponseAnalyzer # Deprecated/Replaced
+from chaos_kitten.paws.analyzer import ResponseAnalyzer
 from chaos_kitten.litterbox.reporter import Reporter
 from chaos_kitten.paws.executor import Executor
 
@@ -100,18 +101,20 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
                 payload_used = json.dumps(payload_obj, sort_keys=True, default=str)
         else:
             payload_used = str(payload_obj)
-
-        # Analyze error messages
-        analysis = analyzer.analyze_error_messages(result)
-        if analysis.get("confidence", 0) > 0:
-            logger.info("Error analysis for %s: %s", endpoint.get("path"), analysis)
-
+        
+        # Prepare params for new analyzer signature
+        response_data = {
+            "body": result.get("response_body", ""),
+            "status_code": result.get("status_code", 0),
+            "elapsed_ms": result.get("elapsed_ms", 0)
+        }
+        
+        # Attack profile is in 'attack' variable
         finding = analyzer.analyze(
-            response_body=result.get("body", ""),
-            status_code=result.get("status_code", 0),
-            response_time_ms=result.get("elapsed_ms", 0),
-            payload_used=payload_used,
+            response=response_data,
+            attack_profile=attack,
             endpoint=f"{endpoint.get('method')} {endpoint.get('path')}",
+            payload=payload_used
         )
 
         if finding:

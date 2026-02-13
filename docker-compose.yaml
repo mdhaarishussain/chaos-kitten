@@ -1,0 +1,48 @@
+services:
+  chaos-kitten:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: chaos-kitten:latest
+    container_name: chaos-kitten
+    volumes:
+      # Mount config file
+      - ./chaos-kitten.yaml:/app/chaos-kitten.yaml
+      # Mount reports directory to persist scan results
+      - ./reports:/app/reports
+      # Mount toys directory if you want to use custom attack profiles
+      - ./toys:/app/toys
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    networks:
+      - kitten-net
+    depends_on:
+      - demo-api
+    # By default, don't run a scan, just keep container available/help
+    # Or you can override this with: docker-compose run chaos-kitten scan --demo
+
+  demo-api:
+    build: 
+      context: ./examples/demo_api
+      # Simple inline Dockerfile for the demo API since it doesn't have one
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        COPY app.py .
+        # Ensure it listens on all interfaces inside the container
+        CMD ["flask", "run", "--host=0.0.0.0"]
+    container_name: demo-api
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_DEBUG=1
+    networks:
+      - kitten-net
+    ports:
+      - "5000:5000"
+
+networks:
+  kitten-net:
+    driver: bridge
