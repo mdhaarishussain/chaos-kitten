@@ -24,6 +24,43 @@ cd chaos-kitten
 pip install -e .
 ```
 
+### Option 3: Docker (Recommended for Isolation)
+
+To run Chaos Kitten in a containerized environment (ensuring all dependencies, including browsers for XSS testing, are isolated):
+
+**Using Docker Compose (Easiest)**
+
+This spins up both the scanner and a vulnerable demo API:
+
+```bash
+# Set your API key environment variable first
+export ANTHROPIC_API_KEY=your_key_here
+# OR
+export OPENAI_API_KEY=your_key_here
+
+# Start the demo environment
+docker-compose up -d demo-api
+
+# Run a scan against the demo API
+docker-compose run chaos-kitten scan --demo
+```
+
+**Using Standalone Docker**
+
+Build the image:
+```bash
+docker build -t chaos-kitten .
+```
+
+Run a scan (mounting your current directory for config and reports):
+```bash
+docker run --rm \
+  -v $(pwd)/chaos-kitten.yaml:/app/chaos-kitten.yaml \
+  -v $(pwd)/reports:/app/reports \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  chaos-kitten scan
+```
+
 ## Quick Start
 
 ### 1. Initialize Configuration

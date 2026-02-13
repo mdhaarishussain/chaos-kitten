@@ -523,12 +523,13 @@ class Reporter:
                     rules.append(
                         {
                             "id": vuln_type,
-                            "name": vuln.get("title", "Unknown Vulnerability"),
+                            "name": vuln.get("title", vuln_type),
                             "shortDescription": {
-                                "text": vuln.get("title", "Unknown Vulnerability")
+                                "text": vuln.get("title", vuln_type)
                             },
                             "fullDescription": {"text": vuln.get("description", "")},
                             "help": {"text": vuln.get("remediation", "")},
+                            "helpUri": "https://github.com/mdhaarishussain/chaos-kitten",
                             "defaultConfiguration": {
                                 "level": self._map_severity_to_sarif(
                                     vuln.get("severity", "medium")
@@ -557,17 +558,23 @@ class Reporter:
                                 }
                             }
                         ],
+                        "properties": {
+                            "payload": vuln.get("payload", ""),
+                            "proof_of_concept": vuln.get("proof_of_concept", ""),
+                            "remediation": vuln.get("remediation", ""),
+                            "evidence": vuln.get("evidence", "")
+                        }
                     }
                 )
 
             sarif_report = {
-                "$schema": "https://json.schemastore.org/sarif-2.1.0-rtm.5.json",
+                "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
                 "version": "2.1.0",
                 "runs": [
                     {
                         "tool": {
                             "driver": {
-                                "name": "Chaos Kitten",
+                                "name": "chaos-kitten",
                                 "version": "0.1.0",
                                 "rules": rules,
                             }
