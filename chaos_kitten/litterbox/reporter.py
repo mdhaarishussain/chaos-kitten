@@ -1,11 +1,12 @@
 """Security Report Generator."""
 
-from pathlib import Path
-from typing import Any, Dict, List
-from datetime import datetime
 import json
 import logging
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateError
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Environment, FileSystemLoader, TemplateError, TemplateNotFound
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,10 @@ class Reporter:
         elif self.output_format == "sarif":
             # Recalculate summary to get flat counts
             vulns = self._validate_vulnerability_data(scan_results)
-            
+
             # Pass validated vulns to sarif generator to avoid double validation
             content = self._generate_sarif_from_vulns(vulns, target_url)
-            
+
             # Also generate minimal results.json for the CI script
             # The CI script expects report.critical, report.high etc.
             summary = self._calculate_executive_summary(vulns)
@@ -178,8 +179,8 @@ class Reporter:
             ) from e
 
     def _validate_vulnerability_data(
-        self, results: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, results: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Validate and process vulnerability findings data.
 
         Args:
@@ -262,8 +263,8 @@ class Reporter:
         return validated_vulns
 
     def _calculate_executive_summary(
-        self, vulnerabilities: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, vulnerabilities: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Calculate executive summary statistics from vulnerability findings.
 
         Args:
@@ -295,8 +296,8 @@ class Reporter:
         }
 
     def _process_vulnerability_for_display(
-        self, vuln: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, vuln: dict[str, Any]
+    ) -> dict[str, Any]:
         """Process a vulnerability for display in templates.
 
         Args:
@@ -496,7 +497,9 @@ class Reporter:
         except Exception as e:
             raise ValueError(f"Failed to generate SARIF report: {e}") from e
 
-    def _generate_sarif_from_vulns(self, vulnerabilities: list[dict[str, Any]], target: str) -> str:
+    def _generate_sarif_from_vulns(
+        self, vulnerabilities: list[dict[str, Any]], target: str
+    ) -> str:
         """Generate SARIF report from validated vulnerabilities.
 
         Args:
@@ -548,7 +551,8 @@ class Reporter:
                                 "physicalLocation": {
                                     "artifactLocation": {
                                         # Use endpoint as location, fallback to target if empty
-                                        "uri": vuln.get("endpoint") or target
+                                        "uri": vuln.get("endpoint")
+                                        or target
                                     }
                                 }
                             }

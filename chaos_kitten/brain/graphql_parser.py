@@ -6,16 +6,19 @@ converts them into a format compatible with the Chaos Kitten Attack Planner.
 """
 
 from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import urlparse
+
 import httpx
 
 # Try to import graphql for SDL parsing
 try:
     from graphql import build_schema, introspection_from_schema
+
     HAS_GRAPHQL_CORE = True
 except ImportError:
     HAS_GRAPHQL_CORE = False
@@ -118,7 +121,9 @@ class GraphQLParser:
     }
     """
 
-    def __init__(self, endpoint_url: str | None = None, schema_path: str | Path | None = None) -> None:
+    def __init__(
+        self, endpoint_url: str | None = None, schema_path: str | Path | None = None
+    ) -> None:
         """Initialize with either a live endpoint or local schema file.
 
         Args:
@@ -127,17 +132,17 @@ class GraphQLParser:
         """
         self.endpoint_url = endpoint_url
         self.schema_path = Path(schema_path) if schema_path else None
-        self.schema: Dict[str, Any] = {}
+        self.schema: dict[str, Any] = {}
 
         if not self.endpoint_url and not self.schema_path:
-            # We allow init without args technically if we plan to set late, 
-            # but usually for this tool we want one. 
+            # We allow init without args technically if we plan to set late,
+            # but usually for this tool we want one.
             # Requirements don't strictly forbid it, but let's be safe.
             pass
 
     def introspect(self) -> dict[str, Any]:
         """Send introspection query to live endpoint, return schema.
-        
+
         Returns:
             The introspection result (dict with __schema key).
         """
@@ -149,13 +154,15 @@ class GraphQLParser:
             response = httpx.post(
                 self.endpoint_url,
                 json={"query": self.INTROSPECTION_QUERY},
-                timeout=30.0
+                timeout=30.0,
             )
             response.raise_for_status()
             data = response.json()
 
             if "errors" in data and data["errors"]:
-                raise ValueError(f"GraphQL Introspection returned errors: {data['errors']}")
+                raise ValueError(
+                    f"GraphQL Introspection returned errors: {data['errors']}"
+                )
 
             if "data" not in data or "__schema" not in data["data"]:
                 raise ValueError("Invalid introspection response: missing __schema")
@@ -172,7 +179,7 @@ class GraphQLParser:
 
     def parse_schema(self) -> dict[str, Any]:
         """Parse a local .graphql or .json schema file.
-        
+
         Returns:
             The parsed schema dictionary.
         """
@@ -190,7 +197,9 @@ class GraphQLParser:
                 elif "__schema" in data:
                     self.schema = data
                 else:
-                    raise ValueError("JSON file does not appear to be a standard introspection result (missing __schema)")
+                    raise ValueError(
+                        "JSON file does not appear to be a standard introspection result (missing __schema)"
+                    )
 
             elif self.schema_path.suffix in [".graphql", ".gql"]:
                 if not HAS_GRAPHQL_CORE:
@@ -208,16 +217,18 @@ class GraphQLParser:
                 # But to be safe and consistent with our self.schema expectation (containing __schema key at root?)
                 # Wait, self.schema = data["data"] where data["data"] has "__schema".
                 # So self.schema should contain "__schema".
-                
+
                 # introspection_from_schema returns a dict with "__schema" key?
                 # No, it returns the schema dict. let's check.
                 # Check `graphql.utilities.introspection_from_schema` doc or assume standard.
                 # Assuming it returns the Dict that usually goes under "data".
-                
+
                 self.schema = introspection_result
 
             else:
-                raise ValueError(f"Unsupported file extension: {self.schema_path.suffix}")
+                raise ValueError(
+                    f"Unsupported file extension: {self.schema_path.suffix}"
+                )
 
             return self.schema
 
@@ -230,7 +241,9 @@ class GraphQLParser:
         if not self.schema:
             return []
 
-        query_type_name = self.schema["__schema"].get("queryType", {}).get("name", "Query")
+        query_type_name = (
+            self.schema["__schema"].get("queryType", {}).get("name", "Query")
+        )
         return self._get_fields_for_type(query_type_name)
 
     def get_mutations(self) -> list[dict[str, Any]]:
@@ -265,19 +278,21 @@ class GraphQLParser:
             return []
 
         for field in target_type["fields"]:
-            fields.append({
-                "name": field["name"],
-                "description": field.get("description"),
-                "args": [
-                    {
-                        "name": arg["name"],
-                        "type": self._resolve_type_name(arg["type"]),
-                        "required": arg["type"]["kind"] == "NON_NULL"
-                    }
-                    for arg in field.get("args", [])
-                ],
-                "type": self._resolve_type_name(field["type"])
-            })
+            fields.append(
+                {
+                    "name": field["name"],
+                    "description": field.get("description"),
+                    "args": [
+                        {
+                            "name": arg["name"],
+                            "type": self._resolve_type_name(arg["type"]),
+                            "required": arg["type"]["kind"] == "NON_NULL",
+                        }
+                        for arg in field.get("args", [])
+                    ],
+                    "type": self._resolve_type_name(field["type"]),
+                }
+            )
         return fields
 
     def _resolve_type_name(self, type_ref: dict[str, Any] | None) -> str:
@@ -308,21 +323,25 @@ class GraphQLParser:
         # Add Mutation operations
         mutations = self.get_mutations()
         for op in mutations:
-            endpoints.append({
-                "path": path,
-                "method": "POST",
-                "operation": f"mutation {op['name']}",
-                "fields": op["args"]  # Already has name, type, required
-            })
+            endpoints.append(
+                {
+                    "path": path,
+                    "method": "POST",
+                    "operation": f"mutation {op['name']}",
+                    "fields": op["args"],  # Already has name, type, required
+                }
+            )
 
         # Add Query operations
         queries = self.get_queries()
         for op in queries:
-            endpoints.append({
-                "path": path,
-                "method": "POST",  # Queries are typically POSTed
-                "operation": f"query {op['name']}",
-                "fields": op["args"]
-            })
+            endpoints.append(
+                {
+                    "path": path,
+                    "method": "POST",  # Queries are typically POSTed
+                    "operation": f"query {op['name']}",
+                    "fields": op["args"],
+                }
+            )
 
         return endpoints
