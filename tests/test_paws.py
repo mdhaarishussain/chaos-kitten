@@ -7,10 +7,34 @@ import pytest
 import respx
 
 from chaos_kitten.paws.executor import Executor
+from chaos_kitten.paws.browser import BrowserAutomation
 
 
 class TestExecutor:
     """Tests for the HTTP executor."""
+    
+    def test_initialization_defaults(self):
+        """Test default values and url normalization."""
+        # Test defaults
+        executor = Executor(base_url="http://test.com")
+        assert executor.rate_limit == 10
+        assert executor.timeout == 30
+        assert executor.auth_type == "none"
+        assert executor.auth_token is None
+        assert executor.base_url == "http://test.com"
+
+        # Test base_url normalization (strip trailing slash)
+        executor_slash = Executor(base_url="http://test.com/")
+        assert executor_slash.base_url == "http://test.com"
+        
+        # Test custom values
+        executor_custom = Executor(
+            base_url="http://test.com", 
+            rate_limit=5, 
+            timeout=60
+        )
+        assert executor_custom.rate_limit == 5
+        assert executor_custom.timeout == 60
 
     def test_build_headers_bearer(self):
         """Test building headers with bearer auth."""
@@ -248,10 +272,35 @@ class TestExecutor:
 
 
 class TestBrowserAutomation:
-    """Tests for browser automation."""
+    """Tests for the browser automation module."""
+    
+    def test_initialization(self):
+        """Test default initialization."""
+        browser = BrowserAutomation(headless=True)
+        assert browser.headless is True
+        assert browser._browser is None
+        assert browser._context is None
+        
+        browser_visible = BrowserAutomation(headless=False)
+        assert browser_visible.headless is False
 
     @pytest.mark.asyncio
-    async def test_xss_detection(self):
-        """Test XSS detection with Playwright."""
-        # TODO: Implement test when browser automation is ready
-        pass
+    async def test_context_manager_not_implemented(self):
+        """Test that context entry raises NotImplementedError."""
+        browser = BrowserAutomation()
+        
+        with pytest.raises(NotImplementedError):
+            async with browser:
+                pass
+
+    @pytest.mark.asyncio
+    async def test_test_xss_not_implemented(self):
+        """Test that test_xss raises NotImplementedError."""
+        browser = BrowserAutomation()
+        
+        with pytest.raises(NotImplementedError):
+            await browser.test_xss(
+                url="http://test.com",
+                payload="<script>alert(1)</script>"
+            )
+
