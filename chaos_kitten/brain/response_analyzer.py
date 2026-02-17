@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import re
 
 class Severity(Enum):
@@ -58,6 +58,12 @@ class ResponseAnalyzer:
                 r"\/bin\/bash",
                 r"win\.ini",
                 r"system\.ini",
+            ],
+            "cache_poisoning": [
+                r"attacker\.com",
+                r"<script>alert\(",
+                r"../../../",
+                r"\.\.%5c",
             ]
         }
 
@@ -68,7 +74,8 @@ class ResponseAnalyzer:
         response_time_ms: float,
         payload_used: str,
         endpoint: str = "",
-        attack_type: str = "unknown"
+        attack_type: str = "unknown",
+        response_headers: Optional[Dict[str, str]] = None
     ) -> Optional[VulnerabilityFinding]:
         """
         Analyze an HTTP response for vulnerability indicators.
@@ -76,6 +83,9 @@ class ResponseAnalyzer:
         Returns a VulnerabilityFinding if a vulnerability is detected,
         None otherwise.
         """
+        if response_headers is None:
+            response_headers = {}
+            
         # 1. Check for SQL Injection
         is_sqli, sqli_confidence = self.detect_sql_injection(response_body)
         if is_sqli:
@@ -114,8 +124,21 @@ class ResponseAnalyzer:
                 payload_used=payload_used,
                 remediation="Validate user input against a strict allowlist and do not use input directly in file paths."
             )
+        
+        # 4. Check for Cache Poisoning
+        is_cache_poison, cache_confidence, cache_evidence = self.detect_cache_poisoning(response_body, response_headers, payload_used)
+        if is_cache_poison:
+            return VulnerabilityFinding(
+                vulnerability_type="Cache Poisoning",
+                severity=Severity.HIGH,
+                confidence=cache_confidence,
+                evidence=cache_evidence,
+                endpoint=endpoint,
+                payload_used=payload_used,
+                remediation="Set Cache-Control: private for sensitive responses, use Vary header properly, and validate Host header against whitelist."
+            )
 
-        # 4. Check for Timing Attacks (Basic)
+        # 5. Check for Timing Attacks (Basic)
         # Assuming a baseline or checking if response time is significantly high > 5000ms for this example
         if response_time_ms > 5000:
              return VulnerabilityFinding(
@@ -151,3 +174,102 @@ class ResponseAnalyzer:
             if re.search(pattern, response, re.IGNORECASE):
                 return True, 1.0
         return False, 0.0
+    
+    def detect_cache_poisoning(
+        self, 
+        response_body: str, 
+        response_headers: Dict[str, str],
+        payload_used: str
+    ) -> Tuple[bool, float, str]:
+        """
+        Detect cache poisoning vulnerabilities by analyzing cache headers and payload presence.
+        
+        Returns:
+            Tuple[bool, float, str]: (is_vulnerable, confidence, evidence)
+        """
+        # 1. Check if payload appears in response body (indicates weak cache key)
+        payload_in_body = payload_used in response_body if payload_used else False
+        
+        # 2. Analyze cache headers for weak configuration
+        weak_cache_config = self._check_weak_cache_headers(response_headers)
+        
+        # 3. Check for dynamic content being cached
+        is_cacheable = self._is_response_cacheable(response_headers)
+        
+        # 4. Check for lack of cache key variance
+        lacks_vary_header = self._lacks_proper_vary_header(response_headers, payload_used)
+        
+        # If payload is in body AND response is cacheable with weak config, high confidence
+        if payload_in_body and is_cacheable and weak_cache_config:
+            evidence = (
+                f"Payload reflected in response and response is publicly cacheable. "
+                f"Cache-Control: {response_headers.get('Cache-Control', 'Not Set')}"
+            )
+            return True, 0.9, evidence
+        
+        # If weak caching + lacks vary header
+        if weak_cache_config and lacks_vary_header:
+            evidence = (
+                f"Weak cache configuration detected. "
+                f"Cache-Control: {response_headers.get('Cache-Control', 'Not Set')}, "
+                f"Vary header: {response_headers.get('Vary', 'Not Set')}"
+            )
+            return True, 0.75, evidence
+        
+        # If just weak cache configuration
+        if weak_cache_config and is_cacheable:
+            evidence = f"Response is publicly cacheable: {response_headers.get('Cache-Control', 'Not Set')}"
+            return True, 0.6, evidence
+        
+        return False, 0.0, ""
+    
+    def _check_weak_cache_headers(self, response_headers: Dict[str, str]) -> bool:
+        """Check if cache headers are weakly configured (e.g., Cache-Control: public)."""
+        cache_control = response_headers.get("Cache-Control", "").lower()
+        
+        # Weak configuration: public caching without proper restrictions
+        weak_indicators = [
+            "public" in cache_control and "no-cache" not in cache_control,
+            "max-age=" in cache_control and int(re.findall(r"max-age=(\d+)", cache_control)[0]) > 300 if re.findall(r"max-age=(\d+)", cache_control) else False,
+            "s-maxage=" in cache_control,  # Shared cache with extended TTL
+        ]
+        
+        return any(weak_indicators)
+    
+    def _is_response_cacheable(self, response_headers: Dict[str, str]) -> bool:
+        """Check if the response is marked as cacheable."""
+        cache_control = response_headers.get("Cache-Control", "").lower()
+        
+        # Response is cacheable if it has max-age duration and not explicitly private
+        cacheable = (
+            "max-age=" in cache_control or 
+            "expires" in response_headers
+        ) and "private" not in cache_control and "no-store" not in cache_control
+        
+        return cacheable
+    
+    def _lacks_proper_vary_header(self, response_headers: Dict[str, str], payload_used: str) -> bool:
+        """
+        Check if response lacks proper Vary header for user-controlled parameters.
+        
+        If payload includes headers like X-Forwarded-Host or Host, the Vary header
+        should include these to differentiate cache entries.
+        """
+        vary_header = response_headers.get("Vary", "").lower()
+        
+        # Common cache poisoning vectors via headers
+        poisoning_headers = [
+            "x-forwarded-host",
+            "x-original-host",
+            "x-host",
+            "x-forwarded-for",
+        ]
+        
+        # Check if poisoning vector is in payload but not in Vary header
+        if payload_used:
+            for header in poisoning_headers:
+                if header in payload_used.lower() and header not in vary_header:
+                    return True
+        
+        return False
+

