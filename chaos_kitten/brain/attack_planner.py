@@ -306,6 +306,10 @@ class AttackPlanner:
         if self._is_file_upload_endpoint(endpoint):
             attacks.extend(self._plan_file_upload_attacks(endpoint))
         
+        # Check if this endpoint is a deserialization endpoint
+        if self._is_deserialization_endpoint(endpoint):
+            attacks.extend(self._plan_deserialization_attacks(endpoint))
+        
         for profile in self.attack_profiles:
             for field_name, location in fields:
                 if any(
@@ -565,6 +569,199 @@ class AttackPlanner:
         
         return False
 
+    def _is_deserialization_endpoint(self, endpoint: dict[str, Any]) -> bool:
+        """Detect if an endpoint is likely a deserialization endpoint.
+        
+        Heuristics:
+        - Content-Type headers indicating serialization formats
+        - Path and parameter names suggesting serialization
+        - Common deserialization-related keywords
+        """
+        method = str(endpoint.get("method", "GET")).upper()
+        if method not in ("POST", "PUT", "PATCH"):
+            return False
+        
+        path = str(endpoint.get("path", "")).lower()
+        
+        # Check path for deserialization-related keywords
+        deserialization_path_keywords = [
+            "deserialize", "serialize", "serial", "unserialize", 
+            "pickle", "marshal", "decode", "hydrate", "object",
+            "restored", "reconstruct", "import", "load", "save",
+            "cache", "session", "state", "persist"
+        ]
+        if any(keyword in path for keyword in deserialization_path_keywords):
+            return True
+        
+        # Check fields for deserialization-related names
+        fields = self._extract_endpoint_fields(endpoint)
+        deserialization_field_names = [
+            "data", "object", "serialized", "pickle", "json", "yaml", "yml",
+            "xml", "body", "content", "payload", "input", "request", "message",
+            "event", "state", "session", "cache", "config", "settings",
+            "preferences", "metadata", "blob", "binary", "stream", "file",
+            "upload", "import", "export", "backup", "restore", "phar"
+        ]
+        
+        for field_name, _ in fields:
+            if any(self._field_matches_target(field_name, name) for name in deserialization_field_names):
+                return True
+        
+        # Check request body for serialization Content-Types
+        request_body = endpoint.get("requestBody") or {}
+        if isinstance(request_body, dict):
+            content = request_body.get("content") or {}
+            serialization_content_types = [
+                "application/x-java-serialized-object",
+                "application/x-python-pickle",
+                "application/x-marshal",
+                "application/x-php-serialize",
+                "application/x-ruby-marshal",
+                "application/x-json-object",
+                "application/x-kryo",
+                "application/x-hessian",
+                "application/x-avro",
+                "application/x-protobuf",
+                "application/x-protocol-buffers"
+            ]
+            for content_type in serialization_content_types:
+                if content_type in content:
+                    return True
+        
+        return False
+
+    def _plan_deserialization_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        """Plan deserialization attacks based on detected language/format.
+        
+        Tests for:
+        - Java deserialization (ysoserial gadget chains)
+        - Python pickle/YAML unsafe loading
+        - PHP unserialize() vulnerabilities
+        """
+        path = endpoint.get("path", "")
+        method = endpoint.get("method", "GET")
+        fields = self._extract_endpoint_fields(endpoint)
+        
+        attacks: list[dict[str, Any]] = []
+        
+        # Get all deserialization profiles
+        deserialization_profiles = [
+            p for p in self.attack_profiles 
+            if p.category == "deserialization"
+        ]
+        
+        if not deserialization_profiles:
+            logger.debug("No deserialization profiles loaded, skipping deserialization attack planning")
+            return attacks
+        
+        # Determine which languages/formats to test based on endpoint characteristics
+        languages_to_test = self._detect_deserialization_languages(endpoint)
+        
+        for language in languages_to_test:
+            # Find matching profiles for this language
+            lang_profiles = [
+                p for p in deserialization_profiles 
+                if language.lower() in p.name.lower()
+            ]
+            
+            if not lang_profiles:
+                # Use all deserialization profiles if no language-specific one found
+                lang_profiles = deserialization_profiles
+            
+            for profile in lang_profiles:
+                for field_name, location in fields:
+                    # Check if field matches target fields for this profile
+                    if not any(
+                        self._field_matches_target(field_name, target)
+                        for target in profile.target_fields
+                    ):
+                        continue
+                    
+                    # Select appropriate payloads based on language
+                    selected_payloads = self._select_deserialization_payloads(
+                        language, profile.payloads
+                    )
+                    
+                    for payload in selected_payloads[:5]:  # Limit to 5 payloads per profile
+                        payload_dict = self._build_payload(field_name, location, payload)
+                        
+                        attacks.append({
+                            "type": "deserialization",
+                            "name": f"{profile.name} - {language}",
+                            "profile_name": profile.name,
+                            "description": f"Test {language} deserialization with gadget: {payload[:50]}...",
+                            "endpoint": path,
+                            "method": method,
+                            "field": field_name,
+                            "location": location,
+                            "payloads": selected_payloads[:10],
+                            "payload": payload_dict,
+                            "target_param": field_name,
+                            "expected_status": 500,
+                            "priority": "critical",
+                            "severity": "critical",
+                            "success_indicators": profile.success_indicators,
+                            "expected_indicators": profile.success_indicators,
+                            "remediation": profile.remediation,
+                            "references": profile.references,
+                            "attack_subtype": f"{language}_deserialization",
+                            "target_language": language
+                        })
+        
+        # Limit to top high-severity attacks
+        attacks.sort(key=self._attack_sort_key)
+        return attacks[:15]
+
+    def _detect_deserialization_languages(self, endpoint: dict[str, Any]) -> list[str]:
+        """Detect which programming languages/formats might be used based on endpoint characteristics."""
+        languages = []
+        
+        path = str(endpoint.get("path", "")).lower()
+        
+        # Check for language-specific keywords in path
+        java_indicators = ["java", "jvm", "spring", "jackson", "fastjson", "xstream", "hibernate"]
+        python_indicators = ["python", "django", "flask", "py", "pickle", "yaml", "pyyaml"]
+        php_indicators = ["php", "laravel", "symfony", "wordpress", "drupal"]
+        
+        for indicator in java_indicators:
+            if indicator in path:
+                languages.append("Java")
+                break
+        
+        for indicator in python_indicators:
+            if indicator in path:
+                languages.append("Python")
+                break
+        
+        for indicator in php_indicators:
+            if indicator in path:
+                languages.append("PHP")
+                break
+        
+        # Check Content-Type headers
+        request_body = endpoint.get("requestBody") or {}
+        if isinstance(request_body, dict):
+            content = request_body.get("content") or {}
+            
+            if "application/x-java-serialized-object" in content and "Java" not in languages:
+                languages.append("Java")
+            if any(t in content for t in ["application/x-python-pickle", "application/x-yaml"]) and "Python" not in languages:
+                languages.append("Python")
+            if "application/x-php-serialize" in content and "PHP" not in languages:
+                languages.append("PHP")
+        
+        # Default to all if no specific language detected
+        if not languages:
+            languages = ["Java", "Python", "PHP"]
+        
+        return languages
+
+    def _select_deserialization_payloads(self, language: str, all_payloads: list[str]) -> list[str]:
+        """Select appropriate payloads based on the target language."""
+        # For now, return all payloads - in a more advanced implementation,
+        # we would filter payloads based on language-specific patterns
+        return all_payloads
+
     def _plan_file_upload_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
         """Plan file upload bypass attacks for upload endpoints.
         
@@ -730,7 +927,7 @@ class AttackPlanner:
                 "payloads": ["oversized_file"],
                 "payload": {field_name: "oversized_file"},
                 "target_param": field_name,
-                "expected_status": 413 or 200,
+                "expected_status": 413,
                 "priority": "medium",
                 "severity": "medium",
                 "success_indicators": {"status_codes": [200, 201]},
@@ -743,4 +940,3 @@ class AttackPlanner:
         # Limit to top high-severity attacks
         attacks.sort(key=self._attack_sort_key)
         return attacks[:10]
-
