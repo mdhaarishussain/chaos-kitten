@@ -268,6 +268,124 @@ safety:
 
 ---
 
+## 🔄 Retry Logic & Rate Limiting
+
+Chaos Kitten includes sophisticated retry logic to handle rate-limited responses (HTTP 429) and transient server errors.
+
+### Automatic Retry Behavior
+
+The executor automatically retries requests that receive:
+- **429** - Too Many Requests (rate limited)
+- **500** - Internal Server Error
+- **502** - Bad Gateway
+- **503** - Service Unavailable  
+- **504** - Gateway Timeout
+
+### Configuration
+
+Configure retry behavior in your `chaos-kitten.yaml`:
+
+```yaml
+executor:
+  rate_limit: 10          # Requests per second
+
+retry:
+  # Maximum number of retry attempts
+  max_attempts: 5
+  
+  # Initial backoff in milliseconds (grows exponentially)
+  initial_backoff_ms: 100
+  
+  # Maximum backoff time in milliseconds
+  max_backoff_ms: 32000
+  
+  # Multiplier for exponential backoff (2.0 = double each try)
+  backoff_multiplier: 2.0
+  
+  # Randomness added to backoff: 0-10% variation
+  jitter_factor: 0.1
+  
+  # Retry strategy: exponential|linear|fixed|adaptive
+  # - exponential: Doubles each retry (100ms, 200ms, 400ms, ...)
+  # - linear: Increases linearly (100ms, 200ms, 300ms, ...)
+  # - fixed: Same delay each retry (100ms, 100ms, 100ms, ...)
+  # - adaptive: Slower exponential growth for better distribution
+  strategy: exponential
+  
+  # Respect the Retry-After HTTP header from server
+  respect_retry_after: true
+  
+  # Which status codes trigger a retry
+  retry_on_status_codes: [429, 500, 502, 503, 504]
+```
+
+### Backoff Strategies
+
+**Exponential Backoff** (Default - Recommended)
+```
+Attempt 1: Wait 100ms, retry
+Attempt 2: Wait 200ms, retry
+Attempt 3: Wait 400ms, retry
+Attempt 4: Wait 800ms, retry
+Attempt 5: Wait 1600ms, fail
+```
+
+**Linear Backoff**
+```
+Attempt 1: Wait 100ms, retry
+Attempt 2: Wait 200ms, retry
+Attempt 3: Wait 300ms, retry
+```
+
+**Fixed Backoff** (Simple)
+```
+Attempt 1-4: Always wait 100ms, retry
+Attempt 5: Fail
+```
+
+**Adaptive Backoff** (Best for unpredictable networks)
+```
+Slower growth curve - better for recovering from congestion
+```
+
+### Jitter
+
+All strategies include optional jitter (randomness) to prevent "thundering herd" problems:
+
+```yaml
+retry:
+  strategy: exponential
+  initial_backoff_ms: 100
+  jitter_factor: 0.1  # Adds 0-10% randomness
+```
+
+With jitter, multiple clients won't all retry at the same time.
+
+### Metrics & Monitoring
+
+Access retry metrics after execution:
+
+```python
+async with Executor(base_url="http://api.example.com") as executor:
+    result = await executor.execute_attack(...)
+    
+    metrics = executor.get_metrics()
+    print(f"Rate limited: {metrics['rate_limited_requests']} times")
+    print(f"Total backoff: {metrics['total_backoff_time_ms']}ms")
+    print(f"Successful retries: {metrics['successful_retries']}")
+```
+
+Metrics include:
+- `total_requests` - Total requests attempted
+- `rate_limited_requests` - How many 429 responses received
+- `retried_requests` - How many requests were retried
+- `successful_retries` - Retries that eventually succeeded
+- `failed_retries` - Retries that failed after max attempts
+- `total_backoff_time_ms` - Total time spent waiting
+- `rate_limit_rate` - Percentage of requests rate limited
+
+---
+
 ## 🎮 Usage
 
 ### Basic Scan

@@ -101,3 +101,38 @@ class Config:
     def safety(self) -> dict[str, Any]:
         """Get safety configuration."""
         return self._config.get("safety", {})
+    
+    @property
+    def retry(self) -> dict[str, Any]:
+        """Get retry configuration.
+        
+        Returns:
+            Retry configuration with sensible defaults:
+            - max_attempts: Maximum number of retry attempts (default: 5)
+            - initial_backoff_ms: Initial backoff in milliseconds (default: 100)
+            - max_backoff_ms: Maximum backoff in milliseconds (default: 32000)
+            - backoff_multiplier: Exponential multiplier (default: 2.0)
+            - jitter_factor: Jitter as fraction of backoff (default: 0.1)
+            - strategy: Retry strategy - exponential|linear|fixed|adaptive (default: exponential)
+            - respect_retry_after: Use Retry-After header (default: true)
+            - retry_on_status_codes: List of status codes to retry on (default: [429, 500, 502, 503, 504])
+        """
+        defaults = {
+            "max_attempts": 5,
+            "initial_backoff_ms": 100,
+            "max_backoff_ms": 32000,
+            "backoff_multiplier": 2.0,
+            "jitter_factor": 0.1,
+            "strategy": "exponential",
+            "respect_retry_after": True,
+            "retry_on_status_codes": [429, 500, 502, 503, 504],
+        }
+        
+        retry_config = self._config.get("retry", {})
+        
+        # Merge defaults with user config
+        for key, default_value in defaults.items():
+            if key not in retry_config:
+                retry_config[key] = default_value
+        
+        return retry_config
