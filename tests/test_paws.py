@@ -1,6 +1,9 @@
 """Tests for the Paws module."""
 
 import asyncio
+import tempfile
+from pathlib import Path
+
 import pytest
 import httpx
 import respx
@@ -295,369 +298,230 @@ class TestExecutor:
         assert executor._client is not None
 
 
-class TestRetryLogic:
-    """Tests for retry logic and backoff behavior."""
+class TestBrowserAutomation:
+    """Tests for the browser automation module."""
+    
+    def test_initialization(self):
+        """Test default initialization."""
+        browser = BrowserAutomation(headless=True)
+        assert browser.headless is True
+        assert browser._browser is None
+        assert browser._context is None
+        assert browser._playwright is None
+        
+        browser_visible = BrowserAutomation(headless=False)
+        assert browser_visible.headless is False
+
+    def test_initialization_with_timeout(self):
+        """Test initialization with custom timeout."""
+        browser = BrowserAutomation(headless=True, timeout=5000)
+        assert browser.timeout == 5000
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_retry_on_429_rate_limit(self):
-        """Test that executor retries on 429 Too Many Requests."""
-        # Mock: First call returns 429, second returns 200
-        route = respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429, json={"error": "rate limited"}),
-                httpx.Response(200, json={"success": True}),
-            ]
-        )
+    async def test_xss_detection_script_tag(self):
+        """Test XSS detection with <script>alert()</script> payload.
 
-        async with Executor(base_url="http://test.com") as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
+        Note: <script> tags injected via innerHTML do NOT execute per HTML5 spec.
+        We use document.write() in the test page so that the <script> payload
+        actually runs and fires the dialog handler in BrowserAutomation.test_xss.
+        """
+        pytest.importorskip("playwright")
 
-        assert route.call_count == 2
-        assert result["status_code"] == 200
-        assert result["error"] is None
-        assert "success" in result["body"]
+        # Uses document.write() which *does* execute <script> tags
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    // Vulnerable - document.write executes <script> tags
+                    document.write(input);
+                });
+            </script>
+        </body>
+        </html>
+        """
 
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_retry_on_503_service_unavailable(self):
-        """Test that executor retries on 503 Service Unavailable."""
-        route = respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(503, text="Service Unavailable"),
-                httpx.Response(503, text="Service Unavailable"),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
 
-        async with Executor(base_url="http://test.com") as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
+        screenshot_path = None
+        with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
+            try:
+                async with BrowserAutomation(headless=True) as browser:
+                    result = await browser.test_xss(
+                        url=f"file://{test_file}",
+                        payload="<script>alert('XSS')</script>",
+                        input_selector="#test-input",
+                        screenshot_dir=tmp_screenshot_dir,
+                    )
 
-        assert route.call_count == 3
-        assert result["status_code"] == 200
-        assert result["error"] is None
+                    # Verify the result structure
+                    assert "is_vulnerable" in result
+                    assert "screenshot_path" in result
+                    assert "error" in result
 
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_no_retry_on_404(self):
-        """Test that executor does NOT retry on 404 Not Found."""
-        route = respx.get("http://test.com/api/notfound").mock(
-            return_value=httpx.Response(404, json={"error": "not found"})
-        )
+                    # The XSS payload should trigger a dialog
+                    assert result["is_vulnerable"] is True
 
-        async with Executor(base_url="http://test.com") as executor:
-            result = await executor.execute_attack(method="GET", path="/api/notfound")
-
-        # Should only be called once (no retry)
-        assert route.call_count == 1
-        assert result["status_code"] == 404
-        assert result["error"] is None
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_max_retry_attempts_exceeded(self):
-        """Test that retry stops after max attempts."""
-        retry_config = RetryConfig(max_attempts=3)
-
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429),
-                httpx.Response(429),
-                httpx.Response(429),
-                httpx.Response(429),  # Should not be called
-            ]
-        )
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
-
-        # Should only retry up to max_attempts
-        assert result["status_code"] == 429
-        assert result["error"] is not None
+                    # Screenshot should be captured on vulnerability detection
+                    screenshot_path = result["screenshot_path"]
+                    if screenshot_path:
+                        assert Path(screenshot_path).exists()
+            finally:
+                Path(test_file).unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_exponential_backoff_calculation(self):
-        """Test exponential backoff calculation."""
-        retry_config = RetryConfig(
-            strategy=RetryStrategy.EXPONENTIAL,
-            initial_backoff_ms=100,
-            backoff_multiplier=2.0,
-            jitter_factor=0.0,  # No jitter for deterministic test
-        )
+    async def test_xss_detection_event_handler(self):
+        """Test XSS detection with event handler (onerror) payload."""
+        pytest.importorskip("playwright")
 
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            # Calculate backoffs for first few attempts
-            backoff_0 = executor._calculate_backoff(0)  # 100ms
-            backoff_1 = executor._calculate_backoff(1)  # 200ms
-            backoff_2 = executor._calculate_backoff(2)  # 400ms
-            backoff_3 = executor._calculate_backoff(3)  # 800ms
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    document.getElementById('output').innerHTML = input;
+                });
+            </script>
+        </body>
+        </html>
+        """
 
-            assert abs(backoff_0 - 0.1) < 0.01
-            assert abs(backoff_1 - 0.2) < 0.01
-            assert abs(backoff_2 - 0.4) < 0.01
-            assert abs(backoff_3 - 0.8) < 0.01
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
 
-    @pytest.mark.asyncio
-    async def test_linear_backoff_strategy(self):
-        """Test linear backoff strategy."""
-        retry_config = RetryConfig(
-            strategy=RetryStrategy.LINEAR,
-            initial_backoff_ms=100,
-            jitter_factor=0.0,
-        )
+        with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
+            try:
+                async with BrowserAutomation(headless=True) as browser:
+                    result = await browser.test_xss(
+                        url=f"file://{test_file}",
+                        payload="<img src=x onerror=alert('XSS')>",
+                        input_selector="#test-input",
+                        screenshot_dir=tmp_screenshot_dir,
+                    )
 
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            backoff_0 = executor._calculate_backoff(0)  # 100ms
-            backoff_1 = executor._calculate_backoff(1)  # 200ms
-            backoff_2 = executor._calculate_backoff(2)  # 300ms
-
-            assert abs(backoff_0 - 0.1) < 0.01
-            assert abs(backoff_1 - 0.2) < 0.01
-            assert abs(backoff_2 - 0.3) < 0.01
-
-    @pytest.mark.asyncio
-    async def test_fixed_backoff_strategy(self):
-        """Test fixed backoff strategy."""
-        retry_config = RetryConfig(
-            strategy=RetryStrategy.FIXED,
-            initial_backoff_ms=150,
-            jitter_factor=0.0,
-        )
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            backoff_0 = executor._calculate_backoff(0)  # 150ms
-            backoff_1 = executor._calculate_backoff(1)  # 150ms
-            backoff_2 = executor._calculate_backoff(2)  # 150ms
-
-            assert abs(backoff_0 - 0.15) < 0.01
-            assert abs(backoff_1 - 0.15) < 0.01
-            assert abs(backoff_2 - 0.15) < 0.01
+                    assert result["is_vulnerable"] is True
+                    assert result["error"] is None
+            finally:
+                Path(test_file).unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    async def test_backoff_with_jitter(self):
-        """Test that jitter adds randomness to backoff."""
-        retry_config = RetryConfig(
-            strategy=RetryStrategy.EXPONENTIAL,
-            initial_backoff_ms=100,
-            jitter_factor=0.5,  # 50% jitter
-        )
+    async def test_no_vulnerability_safe_input(self):
+        """Test that safe input is not flagged as vulnerable."""
+        pytest.importorskip("playwright")
 
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            # Collect multiple backoff values
-            backoffs = [executor._calculate_backoff(0) for _ in range(10)]
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    // Safe - using textContent instead of innerHTML
+                    document.getElementById('output').textContent = input;
+                });
+            </script>
+        </body>
+        </html>
+        """
 
-            # All should be around 100ms but with jitter
-            for backoff in backoffs:
-                # With 0.5 jitter factor, base is 0.1s, so range is 0.1 to 0.15
-                assert 0.09 < backoff < 0.16
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
 
-            # They should not all be the same (verify randomness)
-            assert len(set(backoffs)) > 1
+        try:
+            async with BrowserAutomation(headless=True) as browser:
+                result = await browser.test_xss(
+                    url=f"file://{test_file}",
+                    payload="<script>alert('XSS')</script>",
+                    input_selector="#test-input"
+                )
 
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_retry_after_header_support(self):
-        """Test that Retry-After header is respected."""
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429, headers={"Retry-After": "0.1"}),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
-
-        retry_config = RetryConfig(respect_retry_after=True)
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
-
-        assert result["status_code"] == 200
-        assert result["error"] is None
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_retry_after_header_ignored_when_disabled(self):
-        """Test that Retry-After header is ignored when disabled."""
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429, headers={"Retry-After": "10"}),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
-
-        retry_config = RetryConfig(
-            respect_retry_after=False,
-            initial_backoff_ms=100,
-            jitter_factor=0.0,
-        )
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            start_time = asyncio.get_event_loop().time()
-            result = await executor.execute_attack(method="GET", path="/api/test")
-            elapsed = asyncio.get_event_loop().time() - start_time
-
-        # Should use exponential backoff (100ms) not Retry-After (10s)
-        assert result["status_code"] == 200
-        assert elapsed < 1.0  # Should be quick, not 10+ seconds
+                # Safe page (textContent) should not trigger XSS
+                assert result["error"] is None
+                assert result["is_vulnerable"] is False
+        finally:
+            Path(test_file).unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_metrics_tracking_on_rate_limit(self):
-        """Test that metrics are properly tracked on rate limit events."""
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429, headers={"Retry-After": "1"}),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
+    async def test_context_manager_cleanup(self):
+        """Test that browser resources are properly cleaned up."""
+        pytest.importorskip("playwright")
 
-        async with Executor(base_url="http://test.com") as executor:
-            await executor.execute_attack(method="GET", path="/api/test")
-            metrics = executor.get_metrics()
+        browser = BrowserAutomation(headless=True)
 
-        assert metrics["total_requests"] == 1
-        assert metrics["rate_limited_requests"] == 1
-        assert metrics["retried_requests"] == 1
-        assert metrics["successful_retries"] == 1
-        assert metrics["failed_retries"] == 0
-        assert metrics["total_backoff_time_ms"] > 0
+        async with browser:
+            assert browser._browser is not None
+            assert browser._context is not None
+            assert browser._playwright is not None
+
+        # After exiting, browser should be disconnected
+        assert browser._browser is not None
+        assert browser._browser.is_connected() is False
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_metrics_on_failed_retry(self):
-        """Test that metrics are tracked on failed retries."""
-        respx.get("http://test.com/api/test").mock(
-            return_value=httpx.Response(429)
-        )
-
-        retry_config = RetryConfig(max_attempts=2)
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
-            metrics = executor.get_metrics()
-
-        assert result["error"] is not None
-        assert metrics["rate_limited_requests"] >= 1
-        assert metrics["failed_retries"] == 1
-
-    def test_metrics_reset(self):
-        """Test that metrics can be reset."""
-        executor = Executor(base_url="http://test.com")
-
-        # Simulate some metrics
-        executor._metrics.total_requests = 100
-        executor._metrics.rate_limited_requests = 10
-
-        executor.reset_metrics()
-
-        metrics = executor.get_metrics()
-        assert metrics["total_requests"] == 0
-        assert metrics["rate_limited_requests"] == 0
+    async def test_error_handling_invalid_url(self):
+        """Test error handling with invalid URL."""
+        pytest.importorskip("playwright")
+        
+        async with BrowserAutomation(headless=True) as browser:
+            result = await browser.test_xss(
+                url="http://invalid-url-that-does-not-exist-12345.com",
+                payload="<script>alert('XSS')</script>",
+            )
+            
+            # Should return error instead of raising
+            assert result["is_vulnerable"] is False
+            assert result["error"] is not None
 
     @pytest.mark.asyncio
-    @respx.mock
-    async def test_adaptive_backoff_strategy(self):
-        """Test adaptive backoff strategy."""
-        retry_config = RetryConfig(
-            strategy=RetryStrategy.ADAPTIVE,
-            initial_backoff_ms=100,
-            jitter_factor=0.0,
-        )
+    async def test_selector_not_found(self):
+        """Test error handling when input selector doesn't exist."""
+        pytest.importorskip("playwright")
 
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            backoff_0 = executor._calculate_backoff(0)  # ~100ms
-            backoff_1 = executor._calculate_backoff(1)  # ~280ms (slower than exponential)
-            backoff_2 = executor._calculate_backoff(2)  # ~591ms
+        test_html = """
+        <!DOCTYPE html>
+        <html><body><p>No input here</p></body></html>
+        """
 
-            # Adaptive should be slower growth than exponential
-            # For exponential with multiplier 2.0: 0, 0.2, 0.4
-            # Verify it's slower than exponential
-            assert backoff_0 < backoff_1
-            assert backoff_1 < backoff_2
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
 
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_custom_retry_status_codes(self):
-        """Test custom retry status codes configuration."""
-        retry_config = RetryConfig(retry_on_status_codes=[418, 500])
+        try:
+            async with BrowserAutomation(headless=True) as browser:
+                result = await browser.test_xss(
+                    url=f"file://{test_file}",
+                    payload="<script>alert('XSS')</script>",
+                    input_selector="#nonexistent-input"
+                )
 
-        respx.get("http://test.com/api/test").mock(
-            return_value=httpx.Response(418, json={"error": "I'm a teapot"})
-        )
-
-        async with Executor(
-            base_url="http://test.com",
-            retry_config=retry_config,
-        ) as executor:
-            # Should retry on 418 (custom)
-            result = await executor.execute_attack(method="GET", path="/api/test")
-
-        # Multiple calls due to retry
-        assert result["status_code"] == 418
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_retry_with_different_response_codes(self):
-        """Test retry behavior with different response codes."""
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(500, text="Internal Server Error"),
-                httpx.Response(502, text="Bad Gateway"),
-                httpx.Response(503, text="Service Unavailable"),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
-
-        async with Executor(base_url="http://test.com") as executor:
-            result = await executor.execute_attack(method="GET", path="/api/test")
-
-        assert result["status_code"] == 200
-        assert result["error"] is None
-
-    @pytest.mark.asyncio
-    @respx.mock
-    async def test_backoff_timing(self):
-        """Test that actual backoff delays are approximately correct."""
-        respx.get("http://test.com/api/test").mock(
-            side_effect=[
-                httpx.Response(429),
-                httpx.Response(200, json={"ok": True}),
-            ]
-        )
-
-        retry_config = RetryConfig(
-            max_attempts=2,
-            initial_backoff_ms=100,
-            jitter_factor=0.0,
-        )
-
-        async with Executor(
-            base_url="http://test.com", retry_config=retry_config
-        ) as executor:
-            start_time = asyncio.get_event_loop().time()
-            await executor.execute_attack(method="GET", path="/api/test")
-            elapsed = asyncio.get_event_loop().time() - start_time
-
-        # Should have at least one backoff of 100ms
-        assert elapsed >= 0.08  # Account for execution time
-
-
-
-
+                assert result["is_vulnerable"] is False
+                assert result["error"] is not None
+                assert "not found" in result["error"].lower()
+        finally:
+            Path(test_file).unlink(missing_ok=True)

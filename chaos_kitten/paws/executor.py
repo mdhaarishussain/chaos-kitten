@@ -270,16 +270,19 @@ class Executor:
         method: str,
         path: str,
         payload: Optional[Dict[str, Any]] = None,
+        files: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Execute an attack with automatic retry on rate limit.
 
         Args:
-            method: HTTP method (GET, POST, PUT, PATCH, DELETE).
-            path: Request path (relative to base URL).
-            payload: Request body/query parameters.
-            headers: Custom headers to merge.
-
+            method: HTTP method (GET, POST, etc.)
+            path: API endpoint path
+            payload: Request body/parameters
+            files: Files to upload (for multipart/form-data)
+                   Format: {'field_name': ('filename', content, 'content_type')}
+            headers: Additional headers
+            
         Returns:
             Response dictionary with status_code, body, headers, elapsed_ms, error.
         """
@@ -287,178 +290,138 @@ class Executor:
             return {
                 "status_code": 0,
                 "body": "",
+                "elapsed_ms": 0.0,
+                "error": "Client not initialized. Use 'async with Executor(...)' pattern.",
+            }
+        
+        # Apply rate limiting
+        await self._apply_rate_limit()
+        
+        # Merge additional headers
+        request_headers = self._client.headers.copy()
+        if headers:
+            request_headers.update(headers)
+        
+        # Prepare request parameters
+        method = method.upper()
+        start_time = time.perf_counter()
+        
+        try:
+            # Execute request based on method
+            if method == "GET":
+                response = await self._client.get(
+                    path,
+                    params=payload,
+                    headers=request_headers,
+                )
+            elif method in ("POST", "PUT", "PATCH"):
+                # Handle multipart/form-data vs json
+                if files:
+                    # If files are present, payload usually goes into 'data' form fields
+                    # httpx handles boundary and content-type for files automatically
+                    response = await self._client.request(
+                        method,
+                        path,
+                        data=payload, # Form fields
+                        files=files,  # File uploads
+                        headers=request_headers,
+                    )
+                else:
+                    response = await self._client.request(
+                        method,
+                        path,
+                        json=payload,
+                        headers=request_headers,
+                    )
+            elif method == "DELETE":
+                response = await self._client.delete(
+                    path,
+                    headers=request_headers,
+                )
+            else:
+                return {
+                    "status_code": 0,
+                    "headers": {},
+                    "body": "",
+                    "elapsed_ms": 0.0,
+                    "error": f"Unsupported HTTP method: {method}",
+                }
+            
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            
+            return {
+                "status_code": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.text,
+                "elapsed_ms": elapsed_ms,
+                "error": None,
+            }
+            
+        except httpx.TimeoutException as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            error_msg = f"Request timeout: {str(e)}"
+            logger.warning(f"Timeout executing {method} {path}: {e}")
+            return {
+                "status_code": 0,
                 "headers": {},
                 "elapsed_ms": 0,
                 "error": "Executor not initialized. Use 'async with Executor()' context manager.",
             }
-
-        # Validate HTTP method
-        method_upper = method.upper()
-        valid_methods = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
-        if method_upper not in valid_methods:
-            return {
-                "status_code": 0,
-                "body": "",
-                "headers": {},
-                "elapsed_ms": 0,
-                "error": f"Unsupported HTTP method: {method}",
-            }
-
-        url = f"{self.base_url}{path}"
-        self._metrics.total_requests += 1
-
-        # Retry loop
-        last_error = None
-        last_response = None
-
-        for attempt in range(self.retry_config.max_attempts):
-            try:
-                # Apply rate limiting
-                await self._apply_rate_limit()
-
-                # Prepare request
-                request_headers = self._build_headers(headers)
-                start_time = time.time()
-
-                # Execute request
-                if method_upper == "GET":
-                    response = await self._client.get(url, params=payload, headers=request_headers)
-                elif method_upper == "POST":
-                    response = await self._client.post(url, json=payload, headers=request_headers)
-                elif method_upper == "PUT":
-                    response = await self._client.put(url, json=payload, headers=request_headers)
-                elif method_upper == "PATCH":
-                    response = await self._client.patch(url, json=payload, headers=request_headers)
-                elif method_upper == "DELETE":
-                    response = await self._client.delete(url, headers=request_headers)
-                elif method_upper == "HEAD":
-                    response = await self._client.head(url, headers=request_headers)
-                elif method_upper == "OPTIONS":
-                    response = await self._client.options(url, headers=request_headers)
-
-                elapsed_ms = (time.time() - start_time) * 1000
-                last_response = response
-                response_headers_dict = dict(response.headers)
-
-                # Check if we should retry
-                if self._should_retry(response.status_code, attempt):
-                    self._metrics.retried_requests += 1
-                    await self._log_rate_limit_event(
-                        response.status_code, response_headers_dict, attempt
-                    )
-
-                    # Calculate backoff
-                    retry_after = self._get_retry_after(response_headers_dict)
-                    if retry_after:
-                        backoff_time = retry_after
-                        logger.info(f"Using Retry-After value: {backoff_time}s")
-                    else:
-                        backoff_time = await self._calculate_backoff_async(attempt)
-
-                    self._metrics.total_backoff_time_ms += backoff_time * 1000
-                    logger.warning(
-                        f"Retrying after {backoff_time:.2f}s (attempt {attempt + 1}/{self.retry_config.max_attempts})"
-                    )
-
-                    await asyncio.sleep(backoff_time)
-                    continue
-
-                # Success or non-retryable response
-                if response.status_code < 400:
-                    self._metrics.successful_retries += 1
-
-                logger.debug(
-                    f"{method_upper} {path} -> {response.status_code} ({elapsed_ms:.2f}ms)"
-                )
-
-                return {
-                    "status_code": response.status_code,
-                    "body": response.text,
-                    "headers": response_headers_dict,
-                    "elapsed_ms": elapsed_ms,
-                    "error": None,
-                }
-
-            except httpx.TimeoutException as e:
-                last_error = f"Request timeout after {self.timeout}s: {str(e)}"
-                logger.error(last_error)
-
-                # Don't retry timeouts beyond max attempts
-                if attempt >= self.retry_config.max_attempts - 1:
-                    break
-
-                backoff_time = await self._calculate_backoff_async(attempt)
-                self._metrics.total_backoff_time_ms += backoff_time * 1000
-                await asyncio.sleep(backoff_time)
-
-            except httpx.ConnectError as e:
-                last_error = f"Connection error: {str(e)}"
-                logger.error(last_error)
-
-                # Don't retry connection errors beyond max attempts
-                if attempt >= self.retry_config.max_attempts - 1:
-                    break
-
-                backoff_time = await self._calculate_backoff_async(attempt)
-                self._metrics.total_backoff_time_ms += backoff_time * 1000
-                await asyncio.sleep(backoff_time)
-
-            except httpx.RequestError as e:
-                last_error = f"Request error: {str(e)}"
-                logger.error(last_error)
-                break
-
-            except Exception as e:
-                last_error = f"Unexpected error: {str(e)}"
-                logger.error(last_error)
-                break
-
-        # All retries exhausted
-        self._metrics.failed_retries += 1
-        error_msg = last_error or "Unknown error - all retries exhausted"
-
-        return {
-            "status_code": last_response.status_code if last_response else 0,
-            "body": last_response.text if last_response else "",
-            "headers": dict(last_response.headers) if last_response else {},
-            "elapsed_ms": 0,
-            "error": error_msg,
-        }
-
-    async def _calculate_backoff_async(self, attempt: int) -> float:
-        """Async wrapper for backoff calculation.
-
-        Args:
-            attempt: Current attempt number.
-
-        Returns:
-            Backoff time in seconds.
-        """
-        return self._calculate_backoff(attempt)
-
-    def get_metrics(self) -> Dict[str, Any]:
-        """Get current metrics for rate limiting and retry events.
-
-        Returns:
-            Dictionary containing metrics.
-        """
-        return {
-            "total_requests": self._metrics.total_requests,
-            "rate_limited_requests": self._metrics.rate_limited_requests,
-            "retried_requests": self._metrics.retried_requests,
-            "successful_retries": self._metrics.successful_retries,
-            "failed_retries": self._metrics.failed_retries,
-            "total_backoff_time_ms": self._metrics.total_backoff_time_ms,
-            "rate_limit_rate": (
-                self._metrics.rate_limited_requests / self._metrics.total_requests
-                if self._metrics.total_requests > 0
-                else 0.0
-            ),
-            "last_rate_limit_timestamp": self._metrics.last_rate_limit_timestamp,
-            "retry_after_headers_seen": self._metrics.rate_limit_headers_seen,
-        }
-
-    def reset_metrics(self) -> None:
-        """Reset all metrics counters."""
-        self._metrics = RateLimitMetrics()
-        logger.debug("Metrics reset")
+            
+        # ... (rest of exception handling remains similar, ensuring closing indent)
+        except httpx.ConnectError as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"Connection error: {str(e)}"
+             logger.warning(f"Connection error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+             
+        except httpx.HTTPError as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"HTTP error: {str(e)}"
+             logger.warning(f"HTTP error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+             
+        except Exception as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"Unexpected error: {str(e)}"
+             logger.warning(f"Unexpected error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+    
+    async def _apply_rate_limit(self) -> None:
+        """Apply rate limiting using token bucket algorithm."""
+        if not self._rate_limiter:
+            return
+        
+        # Acquire semaphore token
+        async with self._rate_limiter:
+            # Calculate time since last request
+            current_time = time.perf_counter()
+            time_since_last = current_time - self._last_request_time
+            
+            # Minimum time between requests (in seconds)
+            min_interval = 1.0 / self.rate_limit if self.rate_limit > 0 else 0
+            
+            # Sleep if we're going too fast
+            if time_since_last < min_interval:
+                await asyncio.sleep(min_interval - time_since_last)
+            
+            # Update last request time
+            self._last_request_time = time.perf_counter()

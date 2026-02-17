@@ -322,7 +322,12 @@ class Reporter:
             {
                 "severity_class": severity_info["class"],
                 "severity_color": severity_info["color"],
-                "cat_message": f"🐱 I knocked this vase over! Found {severity} severity issue.",
+                "cat_message": (
+                    f"🐱 I found a shiny secret! {severity.title()} severity issue."
+                    if "Secret" in vuln.get("title", "") or "Key" in vuln.get("title", "")
+                    else
+                    f"🐱 I knocked this vase over! Found {severity} severity issue."
+                ),
                 "poc": vuln.get(
                     "proof_of_concept", ""
                 ),  # Map proof_of_concept to poc for template
