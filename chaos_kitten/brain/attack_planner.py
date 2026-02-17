@@ -301,6 +301,11 @@ class AttackPlanner:
         fields = self._extract_endpoint_fields(endpoint)
 
         attacks: list[dict[str, Any]] = []
+        
+        # Check if this endpoint is a file upload endpoint
+        if self._is_file_upload_endpoint(endpoint):
+            attacks.extend(self._plan_file_upload_attacks(endpoint))
+        
         for profile in self.attack_profiles:
             for field_name, location in fields:
                 if any(
@@ -526,3 +531,216 @@ class AttackPlanner:
                 f"Test '{field_name}' of type '{field_type}' "
                 "with boundary values and injection strings."
             )
+
+    def _is_file_upload_endpoint(self, endpoint: dict[str, Any]) -> bool:
+        """Detect if an endpoint is likely a file upload endpoint.
+        
+        Heuristics:
+        - POST/PUT/PATCH method
+        - Parameter names like: file, upload, attachment, document, image, media, avatar, profile_picture
+        - Content-Type: multipart/form-data in request body
+        """
+        method = str(endpoint.get("method", "GET")).upper()
+        if method not in ("POST", "PUT", "PATCH"):
+            return False
+        
+        path = str(endpoint.get("path", "")).lower()
+        upload_keywords = ["upload", "file", "attachment", "media", "image", "document", "form", "profile"]
+        if any(keyword in path for keyword in upload_keywords):
+            return True
+        
+        fields = self._extract_endpoint_fields(endpoint)
+        file_field_names = ["file", "upload", "attachment", "document", "image", "media", "avatar", "profile_picture"]
+        
+        for field_name, _ in fields:
+            if any(self._field_matches_target(field_name, file_field) for file_field in file_field_names):
+                return True
+        
+        # Check request body for multipart/form-data
+        request_body = endpoint.get("requestBody") or {}
+        if isinstance(request_body, dict):
+            content = request_body.get("content") or {}
+            if "multipart/form-data" in content:
+                return True
+        
+        return False
+
+    def _plan_file_upload_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        """Plan file upload bypass attacks for upload endpoints.
+        
+        Tests for:
+        - MIME type spoofing
+        - Extension filtering bypass
+        - Path traversal in filenames
+        - File size validation bypass
+        - Polyglot files
+        """
+        path = endpoint.get("path", "")
+        method = endpoint.get("method", "GET")
+        fields = self._extract_endpoint_fields(endpoint)
+        
+        # Find file upload fields
+        file_field_names = ["file", "upload", "attachment", "document", "image", "media", "avatar", "profile_picture"]
+        file_fields = [
+            (field_name, location)
+            for field_name, location in fields
+            if any(self._field_matches_target(field_name, file_field) for file_field in file_field_names)
+        ]
+        
+        # If no specific file fields found, use first field as upload field
+        if not file_fields and fields:
+            file_fields = [fields[0]]
+        
+        attacks: list[dict[str, Any]] = []
+        
+        # File upload profile
+        file_upload_profile = next(
+            (p for p in self.attack_profiles if p.category == "file_upload"),
+            None
+        )
+        
+        if not file_upload_profile:
+            logger.debug("File upload profile not loaded, skipping file upload attack planning")
+            return attacks
+        
+        for field_name, location in file_fields:
+            # MIME type spoofing attacks
+            mime_types = ["image/jpeg", "image/png", "text/plain", "application/pdf"]
+            for mime_type in mime_types:
+                attacks.append({
+                    "type": "file_upload",
+                    "name": "MIME Type Spoofing",
+                    "profile_name": file_upload_profile.name,
+                    "description": f"Attempt to bypass MIME type validation by spoofing as {mime_type}",
+                    "endpoint": path,
+                    "method": method,
+                    "field": field_name,
+                    "location": location,
+                    "payloads": [f"shell.php (as {mime_type})"],
+                    "payload": {
+                        field_name: "shell.php",
+                        "mime_type": mime_type
+                    },
+                    "target_param": field_name,
+                    "expected_status": 201 or 200,
+                    "priority": "high",
+                    "severity": "high",
+                    "success_indicators": {"status_codes": [200, 201]},
+                    "expected_indicators": {"status_codes": [200, 201]},
+                    "remediation": file_upload_profile.remediation,
+                    "references": file_upload_profile.references,
+                    "attack_subtype": "mime_type_bypass"
+                })
+            
+            # Extension filtering bypass attacks
+            extension_bypasses = [
+                "shell.php.jpg",
+                "shell.jpg.php",
+                "shell.php%00.jpg",
+                "shell.php.",
+                "shell.php%20",
+                "shell.php5",
+                "shell.phtml"
+            ]
+            for filename in extension_bypasses:
+                attacks.append({
+                    "type": "file_upload",
+                    "name": "Extension Filtering Bypass",
+                    "profile_name": file_upload_profile.name,
+                    "description": f"Attempt to bypass extension filter using filename: {filename}",
+                    "endpoint": path,
+                    "method": method,
+                    "field": field_name,
+                    "location": location,
+                    "payloads": [filename],
+                    "payload": {field_name: filename},
+                    "target_param": field_name,
+                    "expected_status": 200 or 201,
+                    "priority": "high",
+                    "severity": "high",
+                    "success_indicators": {"status_codes": [200, 201]},
+                    "expected_indicators": {"status_codes": [200, 201]},
+                    "remediation": file_upload_profile.remediation,
+                    "references": file_upload_profile.references,
+                    "attack_subtype": "extension_bypass"
+                })
+            
+            # Path traversal attacks
+            traversal_paths = [
+                "../../../etc/passwd",
+                "..\\..\\..\\windows\\system32\\config\\sam",
+                "....//....//....//etc/passwd"
+            ]
+            for traversal in traversal_paths:
+                attacks.append({
+                    "type": "file_upload",
+                    "name": "Path Traversal in Upload",
+                    "profile_name": file_upload_profile.name,
+                    "description": f"Attempt path traversal in upload filename: {traversal}",
+                    "endpoint": path,
+                    "method": method,
+                    "field": field_name,
+                    "location": location,
+                    "payloads": [traversal],
+                    "payload": {field_name: traversal},
+                    "target_param": field_name,
+                    "expected_status": 400 or 500,
+                    "priority": "critical",
+                    "severity": "critical",
+                    "success_indicators": {"status_codes": [200, 500]},
+                    "expected_indicators": {"status_codes": [200, 500]},
+                    "remediation": file_upload_profile.remediation,
+                    "references": file_upload_profile.references,
+                    "attack_subtype": "path_traversal"
+                })
+            
+            # Null byte injection
+            attacks.append({
+                "type": "file_upload",
+                "name": "Null Byte Injection",
+                "profile_name": file_upload_profile.name,
+                "description": "Attempt to bypass extension filters using null byte injection",
+                "endpoint": path,
+                "method": method,
+                "field": field_name,
+                "location": location,
+                "payloads": ["shell.php%00.jpg"],
+                "payload": {field_name: "shell.php%00.jpg"},
+                "target_param": field_name,
+                "expected_status": 200 or 201,
+                "priority": "high",
+                "severity": "high",
+                "success_indicators": {"status_codes": [200, 201]},
+                "expected_indicators": {"status_codes": [200, 201]},
+                "remediation": file_upload_profile.remediation,
+                "references": file_upload_profile.references,
+                "attack_subtype": "null_byte"
+            })
+            
+            # File size validation bypass
+            attacks.append({
+                "type": "file_upload",
+                "name": "File Size Validation Bypass",
+                "profile_name": file_upload_profile.name,
+                "description": "Attempt to bypass file size validation limits",
+                "endpoint": path,
+                "method": method,
+                "field": field_name,
+                "location": location,
+                "payloads": ["oversized_file"],
+                "payload": {field_name: "oversized_file"},
+                "target_param": field_name,
+                "expected_status": 413 or 200,
+                "priority": "medium",
+                "severity": "medium",
+                "success_indicators": {"status_codes": [200, 201]},
+                "expected_indicators": {"status_codes": [200, 201]},
+                "remediation": file_upload_profile.remediation,
+                "references": file_upload_profile.references,
+                "attack_subtype": "size_bypass"
+            })
+        
+        # Limit to top high-severity attacks
+        attacks.sort(key=self._attack_sort_key)
+        return attacks[:10]
+

