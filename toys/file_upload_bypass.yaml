@@ -1,0 +1,78 @@
+# File Upload Bypass Attack Profile
+# Tests for vulnerabilities in file upload functionality
+
+name: "File Upload Bypass"
+category: "file_upload"
+severity: "high"
+description: >
+  Tests for file upload vulnerabilities including MIME type spoofing, 
+  extension filtering bypass, path traversal in filenames, and 
+  malicious file content.
+
+# Fields commonly vulnerable to file upload attacks
+target_fields:
+  - "file"
+  - "upload"
+  - "avatar"
+  - "image"
+  - "document"
+  - "doc"
+  - "attachment"
+  - "media"
+  - "profile_pic"
+
+# Attack payloads to test
+payloads:
+  # --- Extension Bypass ---
+  - "test.php.jpg"
+  - "test.php.png"
+  - "test.php.gif"
+  - "test.php%00.jpg"
+  - "test.php\x00.jpg"
+  - "test.PhP"
+  - "test.pHp"
+  - "test.php5"
+  - "test.phtml"
+  - "test.jsp"
+  - "test.asp"
+  - "test.aspx"
+  - "test.exe"
+  - "test.sh"
+  
+  # --- Path Traversal in Filename ---
+  - "../../windows/system32/drivers/etc/hosts"
+  - "..\\boot.ini"
+  - "../../../var/www/html/index.php"
+  
+  # --- Metadata / Content Spoofing ---
+  # Content is sanitized to avoid AV detection during development
+  - "shell.jpg::image/jpeg::<?php echo 'Access Denied'; ?>"
+  - "doc.pdf::application/pdf::%PDF-1.4...test..."
+  
+  # --- SVG XSS ---
+  - "xss.svg::image/svg+xml::<svg onload=console.log(1)>"
+
+# Indicators that suggest successful exploitation
+success_indicators:
+  response_contains:
+    - "upload successful"
+    - "file saved"
+    - "/uploads/"
+    - "stored"
+    - "created"
+  status_codes:
+    - 200
+    - 201
+  absence_of:
+    - "invalid file type"
+    - "extension not allowed"
+    - "file too large"
+    - "error"
+    - "403"
+    - "400"
+
+# How to fix this vulnerability
+remediation: |
+  Implement strict file upload validation.
+references:
+  - "https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload"

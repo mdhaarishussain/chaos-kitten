@@ -34,8 +34,8 @@ class Config:
                 f"Configuration file not found: {self.config_path}\n"
                 "Run 'chaos-kitten init' to create one."
             )
-
-        with open(self.config_path) as f:
+        
+        with open(self.config_path, encoding="utf-8") as f:
             self._config = yaml.safe_load(f)
 
         if self._config is None:

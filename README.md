@@ -92,7 +92,7 @@ AI-powered "vibe coding" tools (Claude, Cursor, Windsurf) generate backend APIs 
 </tr>
 </table>
 
-> **Real Story:** While building [Bondhu](https://bondhu.tech) (Digital Twin for mental wellness), we discovered our AI-generated backend had ZERO authentication on critical endpoints. Anyone could access user data.
+> **Real Story:** While building [Bondhu](https://bondhu.tech) (Digital Twin for mental wellness), we discovered our AI vibe coded frontend had ZERO authentication on critical endpoints. Anyone could exploit this to access user data.
 
 **Chaos Kitten finds these issues before attackers do.** 🔒
 

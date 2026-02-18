@@ -1,17 +1,21 @@
-import glob
+"""Attack planning logic for Chaos Kitten."""
 
+from __future__ import annotations
+
+import glob
+import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
-import logging
-import json
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from typing import Any
+
 import yaml
+from langchain_anthropic import ChatAnthropic
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,7 @@ class AttackProfile:
     remediation: str = ""
     references: list[str] = field(default_factory=list)
 
+
 ATTACK_PLANNING_PROMPT = """You are a security expert analyzing an API endpoint for vulnerabilities.
 Endpoint: {method} {path}
 Parameters: {parameters}
@@ -40,7 +45,7 @@ Analyze this endpoint and suggest attack vectors. Consider:
 2. HTTP method (POST/PUT more likely to have injection points)
 3. Authentication requirements
 
-Return a prioritized list of attacks to try. 
+Return a prioritized list of attacks to try.
 You must respond ONLY with a valid JSON array of objects. Do not include markdown formatting or explanations outside the JSON.
 Each object must have the following keys:
 - "type" (string, e.g., "sql_injection", "xss", "idor", "path_traversal")
@@ -63,6 +68,7 @@ REASONING_PROMPT = """You are an API security tester.
 How would you test a field named '{field_name}' of type '{field_type}' for vulnerabilities?
 Provide a concise, 1-2 sentence reasoning."""
 
+
 class AttackPlanner:
     """Plan attacks based on API structure and context.
 
@@ -72,41 +78,51 @@ class AttackPlanner:
     - Plan multi-step attack chains
     - Adapt based on responses
     """
-    
-    def __init__(self, endpoints: list[dict[str, Any]], toys_path: str = "toys/",llm_provider: str = "anthropic",temperature: float = 0.7) -> None:
-        """Initialize the attack planner.
 
-        Args:
-            endpoints: List of parsed API endpoints
-            toys_path: Path to the attack profiles directory
-        """
+    def __init__(
+        self,
+        endpoints: list[dict[str, Any]],
+        toys_path: str = "toys/",
+        llm_provider: str = "anthropic",
+        temperature: float = 0.7,
+    ) -> None:
         self.endpoints = endpoints
         self.toys_path = toys_path
-        self.attack_profiles: list[dict[str, Any]] = []
-        self._cache: dict[str, Any] = {}
-        self.llm_provider=llm_provider.lower()
-        self.temperature=temperature
-        self.llm=self._init_llm()
+        self.attack_profiles: list[AttackProfile] = []
+        self._cache: dict[str, list[dict[str, Any]]] = {}
+        self.llm_provider = llm_provider.lower()
+        self.temperature = temperature
+        self.llm = self._init_llm()
         self.load_attack_profiles()
-    def _init_llm(self)->Any:
-        if self.llm_provider=='anthropic':
-            return ChatAnthropic(model="claude-3-5-sonnet-20241022",temperature=self.temperature)
-        elif self.llm_provider=='openai':
-            return ChatOpenAI(model="gpt-4",temperature=self.temperature)
-        elif self.llm_provider == "ollama":
+
+    def _init_llm(self) -> Any:
+        if self.llm_provider == "anthropic":
+            return ChatAnthropic(
+                model="claude-3-5-sonnet-20241022", temperature=self.temperature
+            )
+        if self.llm_provider == "openai":
+            return ChatOpenAI(model="gpt-4", temperature=self.temperature)
+        if self.llm_provider == "ollama":
             return ChatOllama(model="llama3.1", temperature=self.temperature)
-        else:
-            logger.warning(f"Unknown LLM provider {self.llm_provider}. Falling back to Claude.")
-            return ChatAnthropic(model="claude-3-5-sonnet-20241022", temperature=self.temperature)
-        
-    
+
+        logger.warning(
+            "Unknown LLM provider %s. Falling back to Claude.", self.llm_provider
+        )
+        return ChatAnthropic(
+            model="claude-3-5-sonnet-20241022", temperature=self.temperature
+        )
+
     def load_attack_profiles(self) -> None:
         """Load all attack profiles from the toys directory."""
         search_path = os.path.join(self.toys_path, "*.yaml")
-        yaml_files = glob.glob(search_path)
+        yaml_files = sorted(glob.glob(search_path))
+
+        # Keep this method idempotent when called multiple times.
+        self.attack_profiles = []
+        self._cache.clear()
 
         if not yaml_files:
-            logger.warning(f"No attack profiles found in {self.toys_path}")
+            logger.warning("No attack profiles found in %s", self.toys_path)
             return
 
         for file_path in yaml_files:
@@ -115,7 +131,7 @@ class AttackPlanner:
                     data = yaml.safe_load(f)
 
                 if not data:
-                    logger.warning(f"Skipping empty file: {file_path}")
+                    logger.warning("Skipping empty file: %s", file_path)
                     continue
 
                 # Basic validation of required fields
@@ -126,174 +142,393 @@ class AttackPlanner:
                     "payloads",
                     "target_fields",
                 ]
-                missing = [field for field in required_fields if field not in data]
+                missing = [field_name for field_name in required_fields if field_name not in data]
 
                 if missing:
                     logger.warning(
-                        f"Skipping {file_path}: Missing required fields {missing}"
+                        "Skipping %s: Missing required fields %s", file_path, missing
+                    )
+                    continue
+
+                payloads = data.get("payloads") or []
+                target_fields = data.get("target_fields") or []
+                if not isinstance(payloads, list) or not isinstance(target_fields, list):
+                    logger.warning(
+                        "Skipping %s: 'payloads' and 'target_fields' must be lists",
+                        file_path,
                     )
                     continue
 
                 profile = AttackProfile(
-                    name=data["name"],
-                    category=data["category"],
-                    severity=data["severity"],
-                    description=data.get("description", ""),
-                    payloads=data["payloads"],
-                    target_fields=data["target_fields"],
-                    success_indicators=data.get("success_indicators", {}),
-                    remediation=data.get("remediation", ""),
-                    references=data.get("references", []),
+                    name=str(data["name"]),
+                    category=str(data["category"]),
+                    severity=str(data["severity"]).lower(),
+                    description=str(data.get("description", "")),
+                    payloads=[str(p) for p in payloads],
+                    target_fields=[str(tf).lower() for tf in target_fields],
+                    success_indicators=data.get("success_indicators", {}) or {},
+                    remediation=str(data.get("remediation", "")),
+                    references=[str(r) for r in (data.get("references", []) or [])],
                 )
                 self.attack_profiles.append(profile)
-                logger.debug(f"Loaded attack profile: {profile.name}")
+                logger.debug("Loaded attack profile: %s", profile.name)
+            except Exception as exc:
+                logger.error(
+                    "Failed to load attack profile from %s: %s", file_path, exc
+                )
 
-            except Exception as e:
-                logger.error(f"Failed to load attack profile from {file_path}: {e}")
-
-        logger.info(f"Loaded {len(self.attack_profiles)} attack profiles")
+        logger.info("Loaded %d attack profiles", len(self.attack_profiles))
 
     def plan_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
-        """Plan attacks for a specific endpoint.
-
-        Args:
-            endpoint: Endpoint definition from OpenAPI parser.
-                      Expected structure:
-                      {
-                          "path": "/api/login",
-                          "method": "post",
-                          "parameters": [...],
-                          "requestBody": {...}
-                      }
-
-        Returns:
-            List of planned attacks with payloads and expected behaviors:
-            [
-                {
-                    "profile_name": str,
-                    "endpoint": str,
-                    "method": str,
-                    "field": str,
-                    "location": str (query/path/body),
-                    "payloads": list[str],
-                    "expected_indicators": dict,
-                    "severity": str
-                },
-                ...
-            ]
-        """
-        
-        
+        """Plan attacks for a specific endpoint."""
         path = endpoint.get("path", "")
         method = endpoint.get("method", "GET")
         params = endpoint.get("parameters", [])
         body = endpoint.get("requestBody", {})
-        cache_key = f"{method}:{path}:{json.dumps(params, sort_keys=True)}:{json.dumps(body, sort_keys=True)}"
+
+        cache_key = (
+            f"{method}:{path}:"
+            f"{json.dumps(params, sort_keys=True, default=str)}:"
+            f"{json.dumps(body, sort_keys=True, default=str)}"
+        )
         if cache_key in self._cache:
             return self._cache[cache_key]
-        
-        prompt = ChatPromptTemplate.from_template(ATTACK_PLANNING_PROMPT)
-        parser=JsonOutputParser()
-        chain = prompt | self.llm | parser
-        attacks = []
-        
-        # 1. Attempt LLM Planning
+
+        attacks: list[dict[str, Any]] = []
         try:
             prompt = ChatPromptTemplate.from_template(ATTACK_PLANNING_PROMPT)
-            parser = JsonOutputParser()
-            chain = prompt | self.llm | parser
-            
-            generated_attacks = chain.invoke({
-                "method": method,
-                "path": path,
-                "parameters": json.dumps(params),
-                "body": json.dumps(body)
-            })
-            
-            if isinstance(generated_attacks, list):
-                priority_map = {"high": 0, "medium": 1, "low": 2}
-                generated_attacks.sort(key=lambda x: priority_map.get(str(x.get("priority", "low")).lower(), 3))
-                attacks = generated_attacks
-                logger.info(f"LLM generated {len(attacks)} attack vectors for {method} {path}")
-                
-        except Exception as e:
-            logger.warning(f"LLM attack planning failed for {path}: {str(e)}. Falling back to rule-based profiles.")
-            
-            if not self.attack_profiles:
-                target = "q" if params else "body"
-                attacks.append({
-                    "type": "sql_injection",
-                    "name": "Fallback SQLi Probe",
-                    "description": "Basic SQL injection test (No profiles loaded)",
-                    "payload": {target: "' OR 1=1 --"},
-                    "target_param": target,
-                    "expected_status": 500,
-                    "priority": "high"
-                })
+            chain = prompt | self.llm | JsonOutputParser()
+            generated = chain.invoke(
+                {
+                    "method": method,
+                    "path": path,
+                    "parameters": json.dumps(params),
+                    "body": json.dumps(body),
+                }
+            )
+            if isinstance(generated, list) and generated:
+                attacks = self._normalize_llm_attacks(generated, endpoint)
+                if attacks:
+                    logger.info(
+                        "LLM generated %d attack vectors for %s %s",
+                        len(attacks),
+                        method,
+                        path,
+                    )
+        except Exception as exc:
+            logger.warning(
+                "LLM attack planning failed for %s: %s. Falling back to rule-based profiles.",
+                path,
+                exc,
+            )
+
+        if not attacks:
+            attacks = self._plan_rule_based(endpoint)
+
+        self._cache[cache_key] = attacks
+        return attacks
+
+    def _normalize_llm_attacks(
+        self, generated_attacks: list[dict[str, Any]], endpoint: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        method = endpoint.get("method", "GET")
+        path = endpoint.get("path", "")
+        normalized: list[dict[str, Any]] = []
+
+        for raw_attack in generated_attacks:
+            if not isinstance(raw_attack, dict):
+                continue
+
+            target_param = (
+                raw_attack.get("target_param")
+                or raw_attack.get("field")
+                or raw_attack.get("target")
+                or "q"
+            )
+            payload = raw_attack.get("payload")
+            if payload is None:
+                payloads = raw_attack.get("payloads")
+                if isinstance(payloads, list) and payloads:
+                    payload = {target_param: payloads[0]}
+                else:
+                    payload = {target_param: "' OR 1=1 --"}
+            elif isinstance(payload, str):
+                payload = {target_param: payload}
+
+            payload_values: list[str]
+            raw_payloads = raw_attack.get("payloads")
+            if isinstance(raw_payloads, list) and raw_payloads:
+                payload_values = [str(item) for item in raw_payloads]
             else:
-                param_names = [p.get("name") for p in params if isinstance(p, dict)]
-                
-                for profile in self.attack_profiles:
-                    payload_target = None
-                    
-                    if params and "query" in profile.target_fields:
-                        payload_target = param_names[0] if param_names else "q"
-                    elif body and "body" in profile.target_fields:
-                        payload_target = "body"
-                        
-                    if payload_target:
-                        attacks.append({
+                payload_values = [self._payload_preview(payload)]
+
+            severity = str(
+                raw_attack.get("severity")
+                or self._priority_to_severity(str(raw_attack.get("priority", "medium")))
+            ).lower()
+
+            indicators = (
+                raw_attack.get("success_indicators")
+                or raw_attack.get("expected_indicators")
+                or {}
+            )
+            if not isinstance(indicators, dict):
+                indicators = {}
+
+            normalized.append(
+                {
+                    "type": raw_attack.get("type", "generic"),
+                    "name": raw_attack.get("name", "LLM Attack"),
+                    "profile_name": raw_attack.get(
+                        "profile_name", raw_attack.get("name", "LLM Attack")
+                    ),
+                    "description": raw_attack.get("description", ""),
+                    "endpoint": path,
+                    "method": method,
+                    "field": raw_attack.get("field", str(target_param)),
+                    "location": raw_attack.get("location", "query"),
+                    "payloads": payload_values,
+                    "payload": payload,
+                    "target_param": str(target_param),
+                    "expected_status": int(raw_attack.get("expected_status", 500)),
+                    "priority": raw_attack.get("priority", self._severity_to_priority(severity)),
+                    "severity": severity,
+                    "success_indicators": indicators,
+                    "expected_indicators": indicators,
+                    "remediation": raw_attack.get("remediation", ""),
+                    "references": raw_attack.get("references", []),
+                }
+            )
+
+        normalized.sort(key=self._attack_sort_key)
+        return normalized
+
+    def _plan_rule_based(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        method = endpoint.get("method", "GET")
+        path = endpoint.get("path", "")
+        fields = self._extract_endpoint_fields(endpoint)
+
+        attacks: list[dict[str, Any]] = []
+        for profile in self.attack_profiles:
+            for field_name, location in fields:
+                if any(
+                    self._field_matches_target(field_name, target)
+                    for target in profile.target_fields
+                ):
+                    first_payload = (
+                        profile.payloads[0] if profile.payloads else "' OR 1=1 --"
+                    )
+                    payload = self._build_payload(field_name, location, first_payload)
+                    indicators = profile.success_indicators or {}
+                    attacks.append(
+                        {
                             "type": profile.category,
                             "name": profile.name,
+                            "profile_name": profile.name,
                             "description": profile.description,
-                            "payload": {payload_target: profile.payloads[0] if profile.payloads else "TEST"},
-                            "target_param": payload_target,
-                            "expected_status": 400,
-                            "priority": profile.severity
-                        })
+                            "endpoint": path,
+                            "method": method,
+                            "field": field_name,
+                            "location": location,
+                            "payloads": profile.payloads or [first_payload],
+                            "payload": payload,
+                            "target_param": field_name,
+                            "expected_status": self._expected_status(indicators),
+                            "priority": self._severity_to_priority(profile.severity),
+                            "severity": profile.severity,
+                            "success_indicators": indicators,
+                            "expected_indicators": indicators,
+                            "remediation": profile.remediation,
+                            "references": profile.references,
+                        }
+                    )
 
-        self._cache[cache_key] = attacks  
-        return attacks
+        if not attacks:
+            fallback_field, fallback_location = fields[0] if fields else ("q", "query")
+            fallback_payload = self._build_payload(
+                fallback_field, fallback_location, "' OR 1=1 --"
+            )
+            attacks.append(
+                {
+                    "type": "sql_injection",
+                    "name": "Fallback SQLi Probe",
+                    "profile_name": "Fallback SQLi Probe",
+                    "description": "Basic SQL injection test (no profile match)",
+                    "endpoint": path,
+                    "method": method,
+                    "field": fallback_field,
+                    "location": fallback_location,
+                    "payloads": ["' OR 1=1 --"],
+                    "payload": fallback_payload,
+                    "target_param": fallback_field,
+                    "expected_status": 500,
+                    "priority": "high",
+                    "severity": "high",
+                    "success_indicators": {"status_codes": [500]},
+                    "expected_indicators": {"status_codes": [500]},
+                    "remediation": "",
+                    "references": [],
+                }
+            )
+
+        unique_attacks: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for attack in attacks:
+            key = (
+                str(attack.get("profile_name", "")),
+                str(attack.get("field", "")),
+                str(attack.get("location", "")),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_attacks.append(attack)
+
+        unique_attacks.sort(key=self._attack_sort_key)
+        return unique_attacks
+
+    def _extract_endpoint_fields(self, endpoint: dict[str, Any]) -> list[tuple[str, str]]:
+        fields: list[tuple[str, str]] = []
+
+        for param in endpoint.get("parameters", []):
+            if not isinstance(param, dict):
+                continue
+            name = param.get("name")
+            if not name:
+                continue
+            location = str(param.get("in", "query")).lower()
+            fields.append((str(name), location))
+
+        request_body = endpoint.get("requestBody") or {}
+        content = request_body.get("content", {})
+        for content_type, media_type in content.items():
+            schema = media_type.get("schema", {})
+            properties = schema.get("properties", {})
+            if isinstance(properties, dict):
+                for field_name in properties.keys():
+                    fields.append((str(field_name), "body"))
+
+        if not fields:
+            fields.append(("q", "query"))
+
+        deduped: list[tuple[str, str]] = []
+        seen_fields: set[tuple[str, str]] = set()
+        for field_name, location in fields:
+            key = (field_name, location)
+            if key not in seen_fields:
+                seen_fields.add(key)
+                deduped.append(key)
+
+        return deduped
+
+    def _field_matches_target(self, field_name: str, target_field: str) -> bool:
+        field_norm = self._normalize_name(field_name)
+        target_norm = self._normalize_name(target_field)
+
+        if not field_norm or not target_norm:
+            return False
+
+        if field_norm == target_norm:
+            return True
+
+        if target_norm in field_norm or field_norm in target_norm:
+            return True
+
+        field_tokens = set(token for token in field_norm.split("_") if token)
+        target_tokens = set(token for token in target_norm.split("_") if token)
+        if field_tokens.intersection(target_tokens):
+            return True
+
+        for field_token in field_tokens:
+            for target_token in target_tokens:
+                min_len = min(len(field_token), len(target_token))
+                if min_len < 2:
+                    continue
+                if field_token.endswith(target_token) or target_token.endswith(field_token):
+                    return True
+
+        return False
+
+    def _normalize_name(self, value: str) -> str:
+        normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
+        normalized = re.sub(r"_+", "_", normalized).strip("_")
+        return normalized
+
+    def _build_payload(self, field_name: str, location: str, payload: str) -> dict[str, Any]:
+        # Executor handles GET payload as query params and POST/PUT/PATCH payload as JSON.
+        # Keeping a dict shape across locations is the most compatible contract here.
+        return {field_name: payload}
+
+    def _expected_status(self, indicators: dict[str, Any]) -> int:
+        status_codes = indicators.get("status_codes") if isinstance(indicators, dict) else None
+        if isinstance(status_codes, list):
+            for status_code in status_codes:
+                try:
+                    return int(status_code)
+                except (TypeError, ValueError):
+                    continue
+        return 500
+
+    def _severity_rank(self, severity: str) -> int:
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        return order.get(str(severity).lower(), 4)
+
+    def _attack_sort_key(self, attack: dict[str, Any]) -> tuple[int, str]:
+        severity = str(
+            attack.get("severity")
+            or self._priority_to_severity(str(attack.get("priority", "medium")))
+        ).lower()
+        return (self._severity_rank(severity), str(attack.get("profile_name", "")))
+
+    def _severity_to_priority(self, severity: str) -> str:
+        severity = str(severity).lower()
+        if severity in {"critical", "high"}:
+            return "high"
+        if severity == "low":
+            return "low"
+        return "medium"
+
+    def _priority_to_severity(self, priority: str) -> str:
+        priority = str(priority).lower()
+        if priority == "high":
+            return "high"
+        if priority == "low":
+            return "low"
+        return "medium"
+
+    def _payload_preview(self, payload: Any) -> str:
+        if isinstance(payload, dict) and len(payload) == 1:
+            only_value = next(iter(payload.values()))
+            return str(only_value)
+        return str(payload)
+
     def suggest_payloads(self, attack_type: str, context: dict[str, Any]) -> list[str]:
         """Generate context-specific payloads using LLM intelligence."""
         prompt = ChatPromptTemplate.from_template(PAYLOAD_SUGGESTION_PROMPT)
         chain = prompt | self.llm | JsonOutputParser()
-        
+
         try:
-            payloads = chain.invoke({
-                "attack_type": attack_type,
-                "context": json.dumps(context)
-            })
+            payloads = chain.invoke({"attack_type": attack_type, "context": json.dumps(context)})
             if isinstance(payloads, list):
-                return payloads
-        except Exception as e:
-            logger.warning(f"LLM payload suggestion failed: {e}")
-            
-        # fallback
+                return [str(payload) for payload in payloads]
+        except Exception as exc:
+            logger.warning("LLM payload suggestion failed: %s", exc)
+
         return ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd"]
+
     def reason_about_field(self, field_name: str, field_type: str) -> str:
-        """Use LLM to reason about potential vulnerabilities for a field.
-
-        Example:
-            field_name="age", field_type="integer"
-            Returns: "I'll test negative numbers, zero, extremely large values, and strings"
-
-        Args:
-            field_name: Name of the field
-            field_type: Data type of the field
-
-        Returns:
-            Reasoning about what to test"""
-        
+        """Use LLM to reason about potential vulnerabilities for a field."""
         prompt = ChatPromptTemplate.from_template(REASONING_PROMPT)
         chain = prompt | self.llm
-        
+
         try:
-            response = chain.invoke({
-                "field_name": field_name,
-                "field_type": field_type
-            })
-            return response.content
-        except Exception as e:
-            logger.warning(f"LLM field reasoning failed: {e}")
-            return f"Test '{field_name}' of type '{field_type}' with boundary values and injection strings."
+            response = chain.invoke(
+                {"field_name": field_name, "field_type": field_type}
+            )
+            return str(response.content)
+        except Exception as exc:
+            logger.warning("LLM field reasoning failed: %s", exc)
+            return (
+                f"Test '{field_name}' of type '{field_type}' "
+                "with boundary values and injection strings."
+            )

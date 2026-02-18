@@ -104,9 +104,9 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
         
         # Prepare params for new analyzer signature
         response_data = {
-            "body": result.get("response_body", ""),
+            "body": result.get("body", result.get("response_body", "")),
             "status_code": result.get("status_code", 0),
-            "elapsed_ms": result.get("elapsed_ms", 0)
+            "elapsed_ms": result.get("elapsed_ms", result.get("response_time", 0)),
         }
         
         # Attack profile is in 'attack' variable
@@ -119,12 +119,25 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
 
         if finding:
             severity_value = getattr(finding.severity, "value", finding.severity)
+            severity_text = str(severity_value).lower()
+            title = finding.vulnerability_type or "Potential vulnerability detected"
+            description = finding.evidence or "Potential vulnerability detected"
             new_findings.append(
                 {
                     "type": finding.vulnerability_type,
-                    "severity": severity_value,
+                    "title": title,
+                    "description": description,
+                    "severity": severity_text,
                     "endpoint": finding.endpoint,
+                    "method": endpoint.get("method", "GET"),
                     "evidence": finding.evidence,
+                    "payload": payload_used,
+                    "proof_of_concept": "",
+                    "remediation": (
+                        finding.recommendation
+                        if getattr(finding, "recommendation", "")
+                        else "Review input handling and validation."
+                    ),
                 }
             )
 

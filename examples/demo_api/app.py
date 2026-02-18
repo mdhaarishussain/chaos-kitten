@@ -17,7 +17,8 @@ import sqlite3
 from flask import Flask, g, jsonify, request
 
 app = Flask(__name__)
-DATABASE = os.path.join(os.path.dirname(__file__), "demo.db")
+DATABASE = os.path.join(os.path.dirname(__file__), 'demo.db')
+_db_initialized = False
 
 
 def get_db():
@@ -87,6 +88,16 @@ def init_db():
             db.commit()
         except sqlite3.IntegrityError:
             pass  # Data already exists
+
+
+@app.before_request
+def ensure_db_initialized():
+    """Initialize demo DB when running under flask run (no __main__ block)."""
+    global _db_initialized
+    if _db_initialized:
+        return
+    init_db()
+    _db_initialized = True
 
 
 # =====================================================
