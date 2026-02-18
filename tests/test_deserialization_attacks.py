@@ -1,6 +1,7 @@
 """Tests for deserialization attack detection and payload generation."""
 
 import pytest
+from unittest.mock import MagicMock, patch
 from chaos_kitten.brain.attack_planner import AttackPlanner, AttackProfile
 
 
@@ -11,14 +12,16 @@ def base_url():
 
 @pytest.fixture
 def planner():
-    """Create an AttackPlanner with loaded profiles."""
+    """Create an AttackPlanner with loaded profiles and mocked LLM."""
     endpoints = []
-    planner = AttackPlanner(
-        endpoints=endpoints,
-        toys_path="toys/",
-        llm_provider="anthropic",
-        temperature=0.7
-    )
+    with patch("chaos_kitten.brain.attack_planner.ChatAnthropic"):
+        planner = AttackPlanner(
+            endpoints=endpoints,
+            toys_path="toys/",
+            llm_provider="anthropic",
+            temperature=0.7
+        )
+        planner.llm = MagicMock()
     return planner
 
 
@@ -730,11 +733,11 @@ def test_select_deserialization_payloads_java(planner):
         None
     )
     
-    if java_profile:
-        payloads = planner._select_deserialization_payloads("Java", java_profile.payloads)
-        assert len(payloads) > 0
-        # Check for Java-specific payload patterns
-        assert any("rO0AB" in p for p in payloads)  # Base64 Java serialized object
+    assert java_profile is not None, "Java deserialization profile should be loaded"
+    payloads = planner._select_deserialization_payloads("Java", java_profile.payloads)
+    assert len(payloads) > 0, "Should select some Java payloads"
+    # Check for Java-specific payload patterns
+    assert any("rO0AB" in p for p in payloads), "Should contain base64 Java serialized objects"
 
 
 def test_select_deserialization_payloads_python(planner):
@@ -745,11 +748,11 @@ def test_select_deserialization_payloads_python(planner):
         None
     )
     
-    if python_profile:
-        payloads = planner._select_deserialization_payloads("Python", python_profile.payloads)
-        assert len(payloads) > 0
-        # Check for Python-specific payload patterns
-        assert any("pickle" in p.lower() or "!!python" in p for p in payloads)
+    assert python_profile is not None, "Python deserialization profile should be loaded"
+    payloads = planner._select_deserialization_payloads("Python", python_profile.payloads)
+    assert len(payloads) > 0, "Should select some Python payloads"
+    # Check for Python-specific payload patterns
+    assert any("pickle" in p.lower() or "!!python" in p for p in payloads), "Should contain Python-specific patterns"
 
 
 def test_select_deserialization_payloads_php(planner):
@@ -760,11 +763,11 @@ def test_select_deserialization_payloads_php(planner):
         None
     )
     
-    if php_profile:
-        payloads = planner._select_deserialization_payloads("PHP", php_profile.payloads)
-        assert len(payloads) > 0
-        # Check for PHP-specific payload patterns
-        assert any("O:" in p or "s:" in p for p in payloads)  # PHP serialized object
+    assert php_profile is not None, "PHP deserialization profile should be loaded"
+    payloads = planner._select_deserialization_payloads("PHP", php_profile.payloads)
+    assert len(payloads) > 0, "Should select some PHP payloads"
+    # Check for PHP-specific payload patterns
+    assert any("O:" in p or "s:" in p for p in payloads), "Should contain PHP serialized format"
 
 
 def test_plan_deserialization_attacks_java(planner):
@@ -1046,8 +1049,7 @@ def test_plan_attacks_excludes_deserialization_for_safe_endpoints(planner):
         attack.get("type") == "deserialization" 
         for attack in attacks
     )
-    # This might have other attacks but should not have deserialization
-    # depending on the endpoint characteristics
+    assert has_deserialization is False, "Safe endpoints should not have deserialization attacks"
 
 
 # --- Attack Profile Loading Tests ---

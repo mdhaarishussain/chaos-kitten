@@ -596,11 +596,10 @@ class AttackPlanner:
         # Check fields for deserialization-related names
         fields = self._extract_endpoint_fields(endpoint)
         deserialization_field_names = [
-            "data", "object", "serialized", "pickle", "json", "yaml", "yml",
-            "xml", "body", "content", "payload", "input", "request", "message",
-            "event", "state", "session", "cache", "config", "settings",
-            "preferences", "metadata", "blob", "binary", "stream", "file",
-            "upload", "import", "export", "backup", "restore", "phar"
+            "serialized", "pickle", "marshalled", "marshal", "object_data",
+            "encoded_object", "encoded", "yaml", "yml", "phar", "json_object",
+            "json_obj", "pojo", "entity", "dto", "model", "class",
+            "unserialize", "deserialize", "restore", "hydrate", "inject"
         ]
         
         for field_name, _ in fields:
@@ -757,10 +756,58 @@ class AttackPlanner:
         return languages
 
     def _select_deserialization_payloads(self, language: str, all_payloads: list[str]) -> list[str]:
-        """Select appropriate payloads based on the target language."""
-        # For now, return all payloads - in a more advanced implementation,
-        # we would filter payloads based on language-specific patterns
-        return all_payloads
+        """Select appropriate payloads based on the target language.
+        
+        Filter payloads to match the specific language's serialization format.
+        """
+        if not all_payloads:
+            return []
+        
+        language = language.lower()
+        filtered_payloads: list[str] = []
+        
+        for payload in all_payloads:
+            # Java payloads: base64, JSON gadget chains, XML, JNDI
+            if language == "java":
+                # Base64 encoded (typical ysoserial)
+                if payload.startswith(("rO0AB", "rO0AC")):
+                    filtered_payloads.append(payload)
+                # JSON/Fastjson gadget chains
+                elif payload.startswith("{") or payload.startswith("<"):
+                    filtered_payloads.append(payload)
+                # JNDI, JRMP, etc.
+                elif any(x in payload for x in ["jndi:", "jrmp:", "ldap://", "rmi://"]):
+                    filtered_payloads.append(payload)
+            
+            # Python payloads: pickle, YAML, jsonpickle
+            elif language == "python":
+                # Pickle protocol markers or YAML tags
+                if payload.startswith(("80", "(S", "gASV", "!!")):
+                    filtered_payloads.append(payload)
+                # YAML tags
+                elif "!!python" in payload or "!!yaml" in payload:
+                    filtered_payloads.append(payload)
+                # jsonpickle format
+                elif "py/object" in payload or "py/args" in payload:
+                    filtered_payloads.append(payload)
+                # Python string execution
+                elif "os.system" in payload or "subprocess" in payload:
+                    filtered_payloads.append(payload)
+            
+            # PHP payloads: serialized format
+            elif language == "php":
+                # PHP serialize format: O: (object), s: (string), a: (array), etc.
+                if any(x in payload for x in ["O:", "s:", "a:", "i:", "b:", "d:", "N;"]):
+                    filtered_payloads.append(payload)
+                # Basic PHP strings
+                elif not payload.startswith(("{", "rO0AB", "80", "!!")):
+                    filtered_payloads.append(payload)
+        
+        # If we filtered out everything, return all payloads (fallback)
+        if not filtered_payloads:
+            return all_payloads[:10]  # Limit to 10 to prevent explosion
+        
+        return filtered_payloads
 
     def _plan_file_upload_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
         """Plan file upload bypass attacks for upload endpoints.
@@ -819,7 +866,7 @@ class AttackPlanner:
                         "mime_type": mime_type
                     },
                     "target_param": field_name,
-                    "expected_status": 201 or 200,
+                    "expected_status": 201,
                     "priority": "high",
                     "severity": "high",
                     "success_indicators": {"status_codes": [200, 201]},
@@ -852,7 +899,7 @@ class AttackPlanner:
                     "payloads": [filename],
                     "payload": {field_name: filename},
                     "target_param": field_name,
-                    "expected_status": 200 or 201,
+                    "expected_status": 200,
                     "priority": "high",
                     "severity": "high",
                     "success_indicators": {"status_codes": [200, 201]},
@@ -881,7 +928,7 @@ class AttackPlanner:
                     "payloads": [traversal],
                     "payload": {field_name: traversal},
                     "target_param": field_name,
-                    "expected_status": 400 or 500,
+                    "expected_status": 500,
                     "priority": "critical",
                     "severity": "critical",
                     "success_indicators": {"status_codes": [200, 500]},
@@ -904,7 +951,7 @@ class AttackPlanner:
                 "payloads": ["shell.php%00.jpg"],
                 "payload": {field_name: "shell.php%00.jpg"},
                 "target_param": field_name,
-                "expected_status": 200 or 201,
+                "expected_status": [200, 201],
                 "priority": "high",
                 "severity": "high",
                 "success_indicators": {"status_codes": [200, 201]},
