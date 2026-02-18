@@ -4,9 +4,13 @@ import asyncio
 import json
 import logging
 from functools import partial
-from typing import Any, Literal, TypedDict
+from typing import Any, Dict, List, Literal, TypedDict
 
-from langgraph.graph import END, START, StateGraph
+try:
+    from langgraph.graph import END, START, StateGraph
+    HAS_LANGGRAPH = True
+except (ImportError, TypeError):
+    HAS_LANGGRAPH = False
 from rich.console import Console
 from rich.progress import (
     BarColumn,
@@ -33,15 +37,14 @@ console = Console()
 class AgentState(TypedDict):
     spec_path: str
     base_url: str
-    endpoints: list[dict]
+    endpoints: List[Dict[str, Any]]
     current_endpoint: int
-    planned_attacks: list[dict]
-    results: list[dict]
-    findings: list[dict]
-    business_logic_findings: list[dict]
+    planned_attacks: List[Dict[str, Any]]
+    results: List[Dict[str, Any]]
+    findings: List[Dict[str, Any]]
 
 
-def parse_openapi(state: AgentState) -> dict:
+def parse_openapi(state: AgentState) -> Dict[str, Any]:
     try:
         parser = OpenAPIParser(state["spec_path"])
         parser.parse()
@@ -52,7 +55,7 @@ def parse_openapi(state: AgentState) -> dict:
     return {"endpoints": endpoints, "current_endpoint": 0}
 
 
-def plan_attacks(state: AgentState) -> dict:
+def plan_attacks(state: AgentState) -> Dict[str, Any]:
     idx = state["current_endpoint"]
     if idx >= len(state["endpoints"]):
         return {"planned_attacks": []}
@@ -62,65 +65,7 @@ def plan_attacks(state: AgentState) -> dict:
     return {"planned_attacks": planner.plan_attacks(endpoint)}
 
 
-async def test_business_logic(state: AgentState, executor: Executor) -> dict:
-    """Test endpoint for business logic vulnerabilities.
-    
-    This includes:
-    - Race conditions
-    - Workflow bypass
-    - Authorization flaws
-    - Price manipulation
-    """
-    idx = state["current_endpoint"]
-    if idx >= len(state["endpoints"]):
-        return {
-            "business_logic_findings": state["business_logic_findings"],
-            "current_endpoint": idx,
-        }
-
-    endpoint = state["endpoints"][idx]
-    attacker = BusinessLogicAttacker(executor)
-    new_bl_findings = []
-
-    try:
-        # Load business logic attack profiles
-        planner = AttackPlanner([endpoint])
-        
-        # Find business logic profiles
-        for profile in planner.attack_profiles:
-            if not profile.attack_type:
-                continue
-                
-            logger.debug(f"Testing {profile.name} for {endpoint.get('path')}")
-            
-            # Test the endpoint with this profile
-            vulnerabilities = await attacker.test_endpoint(endpoint, profile)
-            
-            # Convert vulnerability objects to dicts
-            for vuln in vulnerabilities:
-                new_bl_findings.append({
-                    "type": "business-logic",
-                    "attack_type": vuln.attack_type.value,
-                    "title": vuln.vulnerability_name,
-                    "description": vuln.description,
-                    "severity": vuln.severity,
-                    "endpoint": vuln.endpoint,
-                    "method": vuln.method,
-                    "evidence": vuln.evidence,
-                    "proof_of_concept": vuln.proof_of_concept,
-                    "remediation": vuln.remediation,
-                })
-                
-    except Exception as e:
-        logger.error(f"Failed to test business logic for {endpoint.get('path')}: {e}")
-
-    return {
-        "business_logic_findings": state["business_logic_findings"] + new_bl_findings,
-        "current_endpoint": idx,
-    }
-
-
-async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
+async def execute_and_analyze(state: AgentState, executor: Executor) -> Dict[str, Any]:
     idx = state["current_endpoint"]
     if idx >= len(state["endpoints"]):
         return {
@@ -230,10 +175,16 @@ class Orchestrator:
     5. Generates reports
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: Dict[str, Any]) -> None:
         self.config = config
 
     def _build_graph(self, executor: Executor):
+        if not HAS_LANGGRAPH:
+            raise ImportError(
+                "langgraph is not available (requires Python 3.9+). "
+                "Please upgrade Python or use a compatible langgraph version."
+            )
+        from langgraph.graph import END, START, StateGraph
         workflow = StateGraph(AgentState)
 
         workflow.add_node("parse", parse_openapi)
@@ -255,7 +206,7 @@ class Orchestrator:
         )
         return workflow.compile()
 
-    async def run(self) -> dict[str, Any]:
+    async def run(self) -> Dict[str, Any]:
         console.print("[bold green]🧠 Chaos Kitten Brain Initializing...[/bold green]")
 
         api_config = self.config.get("api")

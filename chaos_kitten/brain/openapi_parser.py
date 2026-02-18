@@ -31,7 +31,7 @@ Examples:
 from __future__ import annotations
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 from prance import ResolvingParser
 
 logger = logging.getLogger(__name__)
@@ -44,18 +44,18 @@ class OpenAPIParser:
     in JSON and YAML formats.
     """
     
-    def __init__(self, spec_path: str | Path) -> None:
+    def __init__(self, spec_path: Union[str, Path]) -> None:
         """Initialize the parser.
         
         Args:
             spec_path (Union[str, Path]): Path to the OpenAPI spec file (JSON or YAML).
         """
         self.spec_path = Path(spec_path)
-        self.spec: dict[str, Any] = {}
-        self.version: str | None = None
-        self._endpoints: list[dict[str, Any]] = []
+        self.spec: Dict[str, Any] = {}
+        self.version: Optional[str] = None
+        self._endpoints: List[Dict[str, Any]] = []
     
-    def parse(self) -> dict[str, Any]:
+    def parse(self) -> Dict[str, Any]:
         """Parse the OpenAPI specification.
         
         Loads the specification file, validates it against the schema, and 
@@ -124,7 +124,7 @@ class OpenAPIParser:
         paths = self.spec.get('paths', {})
         self._endpoints = self._extract_endpoints(paths)
 
-    def _extract_endpoints(self, paths: dict[str, Any]) -> list[dict[str, Any]]:
+    def _extract_endpoints(self, paths: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract and normalize endpoints from paths object.
         
         Args:
@@ -184,9 +184,9 @@ class OpenAPIParser:
 
     def _normalize_parameters(
         self,
-        parameters: list[dict[str, Any]],
-        consumes: list[str] | None = None
-    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+        parameters: List[Dict[str, Any]],
+        consumes: Optional[List[str]] = None
+    ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         """Normalize parameters and extract body for Swagger 2.0 backward compatibility.
         
         Args:
@@ -264,7 +264,7 @@ class OpenAPIParser:
                 
         return normalized, request_body
 
-    def get_endpoints(self, tags: list[str] | None = None, methods: list[str] | None = None) -> list[dict[str, Any]]:
+    def get_endpoints(self, tags: Optional[List[str]] = None, methods: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Extract all API endpoints from the spec with optional filtering.
         
         Args:
@@ -296,7 +296,7 @@ class OpenAPIParser:
             
         return endpoints
 
-    def get_servers(self) -> list[str]:
+    def get_servers(self) -> List[str]:
         """Extract server URLs from the specification.
 
         Handles both OpenAPI 3.x `servers` array (with variable substitution)
@@ -340,7 +340,7 @@ class OpenAPIParser:
         
         return servers
 
-    def get_security_schemes(self) -> dict[str, Any]:
+    def get_security_schemes(self) -> Dict[str, Any]:
         """Extract and normalize security schemes from the spec.
         
         Extracts schemes from OpenAPI 3.x `components.securitySchemes` or 

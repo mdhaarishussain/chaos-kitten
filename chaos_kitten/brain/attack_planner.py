@@ -415,11 +415,97 @@ class AttackPlanner:
             fields.append((str(name), location))
 
         request_body = endpoint.get("requestBody") or {}
-        if isinstance(request_body, dict):
-            content = request_body.get("content") or {}
-            if isinstance(content, dict):
-                for media_obj in content.values():
-                    if not isinstance(media_obj, dict):
+        content = request_body.get("content", {})
+        for content_type, media_type in content.items():
+            schema = media_type.get("schema", {})
+            properties = schema.get("properties", {})
+            for prop_name, prop_details in properties.items():
+                p_type = prop_details.get("type", "string")
+                targetable_fields.append({"name": prop_name, "location": "body", "type": p_type})
+
+        # Iterate through loaded profiles and find matches
+        for profile in self.attack_profiles:
+            # Special handling for GraphQL Security profile
+            if profile.name == "GraphQL Security":
+                # Check if endpoint path ends with /graphql
+                if endpoint_path.endswith("/graphql") or "graphql" in endpoint_path.lower():
+                    # Plan attacks for this endpoint
+                    # GraphQL usually has a single entry point, so we attack the 'query' or body
+                    attack_plan = {
+                        "profile_name": profile.name,
+                        "endpoint": endpoint_path,
+                        "method": method,
+                        "field": "query", # Virtual field name
+                        "location": "graphql", # Special location for executor
+                        "payloads": profile.payloads,
+                        "expected_indicators": profile.success_indicators,
+                        "severity": profile.severity
+                    }
+                    planned_attacks.append(attack_plan)
+                continue
+
+            # Special handling for file upload profile
+            if profile.name == "File Upload Bypass":
+                # Check if endpoint accepts multipart/form-data
+                request_body = endpoint.get("requestBody") or {}
+                content = request_body.get("content", {})
+                if "multipart/form-data" in content or "application/octet-stream" in content:
+                    # Find file fields
+                    schema = content.get("multipart/form-data", {}).get("schema", {}) or \
+                             content.get("application/octet-stream", {}).get("schema", {})
+                    
+                    properties = schema.get("properties", {})
+                    for prop_name, prop_details in properties.items():
+                        # Heuristic: verify if it looks like a file upload
+                        # OpenAPI 3.0: type: string, format: binary
+                        p_type = prop_details.get("type")
+                        p_format = prop_details.get("format")
+                        
+                        is_file = (p_type == "string" and p_format in ("binary", "base64")) or \
+                                  (prop_name.lower() in profile.target_fields)
+
+                        if is_file:
+                            attack_plan = {
+                                "profile_name": profile.name,
+                                "endpoint": endpoint_path,
+                                "method": method,
+                                "field": prop_name,
+                                "location": "file", # Special location for executor
+                                "payloads": profile.payloads,
+                                "expected_indicators": profile.success_indicators,
+                                "severity": profile.severity
+                            }
+                            planned_attacks.append(attack_plan)
+                continue
+
+            # ... (Standard logic for other profiles)
+            
+            for field_info in targetable_fields:
+                field_name = field_info["name"]
+                _ = field_info["type"] # Unused for now, but keeping for future type awareness
+                
+                # Check 1: Field name match (Exact or Fuzzy)
+                # Exact match
+                is_match = field_name in profile.target_fields
+                
+                # Fuzzy match (e.g., "user_email" matches "email" if "email" is a distinct word part)
+                if not is_match:
+                    # properly handle snake_case and other delimiters
+                    parts = re.split(r'[^a-zA-Z0-9]', field_name.lower())
+                    for target in profile.target_fields:
+                        if target.lower() in parts:
+                            is_match = True
+                            break
+                            
+                if is_match:
+                    # Check 2: Type compatibility (Basic)
+                    # Use categories to determine if type mismatch is critical
+                    # e.g., SQLi (string) vs ID (integer) - sometimes valid, sometimes not.
+                    # For now, we'll be permissive but prioritize string fields for injections.
+                    
+                    # Logic for filtering based on method/category
+                    # e.g. Don't test body interactions on GET requests unless strictly specific
+                    if field_info["location"] == "body" and method == "get":
                         continue
                     schema = media_obj.get("schema") or {}
                     properties = schema.get("properties") if isinstance(schema, dict) else None
