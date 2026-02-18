@@ -1,0 +1,85 @@
+# Authorization Flaw Detection - Business Logic Attack Profile
+# Tests for authorization bypass and privilege escalation vulnerabilities
+
+name: "Authorization Bypass - Privilege Escalation"
+category: "business-logic"
+severity: "critical"
+description: "Tests for authorization flaws allowing privilege escalation and unauthorized business action execution"
+attack_type: "authorization"
+requires_state: false
+concurrent_requests: 1
+timing_sensitive: false
+
+# Fields that control authorization
+target_fields:
+  - "user_id"
+  - "owner_id"
+  - "role"
+  - "permission"
+  - "access_level"
+  - "privilege"
+  - "admin"
+  - "is_admin"
+  - "user_type"
+  - "account_type"
+  - "organization_id"
+  - "team_id"
+
+# Payloads for authorization bypass attempts
+payloads:
+  # Attempt to escalate privileges
+  - "admin"
+  - "true"
+  - "superuser"
+  - "owner"
+  - "manager"
+  - "1"
+  - "0"
+  - ""
+  
+  # Attempt to access other users' resources
+  - "{{ user_id }}"
+  - "{{ other_user_id }}"
+  - "${user_id}"
+  - "${other_user_id}"
+
+success_indicators:
+  # Successfully accessed unauthorized resources
+  response_contains:
+    - "success"
+    - "data"
+    - "result"
+  status_codes:
+    - 200  # Successful unauthorized access
+  # Should NOT contain: 403, 401, "Forbidden", "Unauthorized"
+
+# Define authorization requirements
+state_transitions:
+  - name: "admin_action_authorization"
+    steps:
+      - action: "POST"
+        target: "/admin/users/delete"
+        payload: { "user_id": "other_user_id" }
+        requires: "admin_role"
+        should_fail: "without_admin_role"
+      - action: "POST"
+        target: "/admin/settings"
+        payload: { "setting": "value" }
+        requires: "admin_role"
+
+remediation: |
+  Implement proper authorization controls:
+  - Verify user identity and authorization for each action
+  - Use role-based access control (RBAC)
+  - Use attribute-based access control (ABAC) for complex scenarios
+  - Implement authorization middleware on all endpoints
+  - Validate authorization in business logic, not just API layer
+  - Use access control lists (ACLs) for resource-level permissions
+  - Log all authorization failures
+  - Implement principle of least privilege
+  - Regular authorization audits and penetration testing
+
+references:
+  - "https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Access_Control_Cheat_Sheet.html"

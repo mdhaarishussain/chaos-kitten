@@ -1,0 +1,77 @@
+# Workflow Bypass Detection - Business Logic Attack Profile
+# Tests for ability to skip required workflow steps
+
+name: "Workflow Bypass - Step Skipping"
+category: "business-logic"
+severity: "high"
+description: "Tests for workflow bypass vulnerabilities by attempting to skip required process steps"
+attack_type: "workflow-bypass"
+requires_state: true
+concurrent_requests: 1
+timing_sensitive: false
+
+# Fields in workflow endpoints
+target_fields:
+  - "step"
+  - "stage"
+  - "status"
+  - "order_stage"
+  - "workflow_state"
+  - "checkout_step"
+  - "verification_step"
+  - "approval_stage"
+  - "current_step"
+
+# Payloads for workflow manipulation
+payloads:
+  # Attempt to skip steps
+  - "completed"
+  - "approved"
+  - "verified"
+  - "paid"
+  - "shipped"
+  - "delivered"
+  - "confirmed"
+  - "final"
+
+success_indicators:
+  # Successfully skipped required steps
+  response_contains:
+    - "success"
+    - "created"
+    - "confirmed"
+  status_codes:
+    - 200  # Successful state change when it shouldn't be
+    - 201  # Resource created despite incomplete workflow
+  # Ability to reach final state without intermediate steps
+
+# Define workflow states that must be followed
+state_transitions:
+  - name: "checkout_workflow"
+    steps:
+      - action: "POST"
+        target: "/cart/checkout"
+        payload: { "step": "shipping" }
+        required_previous: "cart_ready"
+      - action: "POST"
+        target: "/checkout/payment"
+        payload: { "step": "payment" }
+        required_previous: "shipping_confirmed"
+      - action: "POST"
+        target: "/checkout/confirm"
+        payload: { "step": "confirmed" }
+        required_previous: "payment_processed"
+
+remediation: |
+  Implement strict workflow validation:
+  - Enforce sequential state transitions
+  - Validate current state before allowing transitions
+  - Implement state machine with explicit allowed transitions
+  - Log all state changes with timestamps
+  - Require authorization for each step
+  - Use idempotency keys to prevent duplicate processing
+  - Implement audit trails for workflow changes
+
+references:
+  - "https://owasp.org/www-community/attacks/Reverse_Engineering"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"

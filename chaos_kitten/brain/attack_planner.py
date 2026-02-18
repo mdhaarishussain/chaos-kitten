@@ -33,6 +33,14 @@ class AttackProfile:
     success_indicators: dict[str, Any]
     remediation: str = ""
     references: list[str] = field(default_factory=list)
+    
+    # Business Logic Attack specific fields
+    attack_type: str = ""  # Type of attack: state-transition, race-condition, authorization, payment, workflow
+    requires_state: bool = False  # Whether the attack requires tracking state
+    requires_concurrency: bool = False  # Whether the attack requires concurrent requests
+    state_transitions: list[dict[str, Any]] = field(default_factory=list)  # State machine for workflow attacks
+    concurrent_requests: int = 1  # Number of concurrent requests needed
+    timing_sensitive: bool = False  # Whether timing is critical for the attack
 
 
 ATTACK_PLANNING_PROMPT = """You are a security expert analyzing an API endpoint for vulnerabilities.
@@ -161,6 +169,12 @@ class AttackPlanner:
                     success_indicators=data.get("success_indicators", {}) or {},
                     remediation=str(data.get("remediation", "")),
                     references=[str(r) for r in (data.get("references", []) or [])],
+                    attack_type=str(data.get("attack_type", "")),
+                    requires_state=bool(data.get("requires_state", False)),
+                    requires_concurrency=bool(data.get("requires_concurrency", False)),
+                    state_transitions=data.get("state_transitions", []) or [],
+                    concurrent_requests=int(data.get("concurrent_requests", 1)),
+                    timing_sensitive=bool(data.get("timing_sensitive", False)),
                 )
                 self.attack_profiles.append(profile)
                 logger.debug("Loaded attack profile: %s", profile.name)

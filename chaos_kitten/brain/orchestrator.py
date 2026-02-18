@@ -1,5 +1,6 @@
 """The Brain Orchestrator - Main agent logic using LangGraph."""
 
+import asyncio
 import json
 import logging
 from functools import partial
@@ -16,6 +17,7 @@ from rich.progress import (
 )
 
 from chaos_kitten.brain.attack_planner import AttackPlanner
+from chaos_kitten.brain.business_logic_attacker import BusinessLogicAttacker
 
 # Internal Chaos Kitten imports
 from chaos_kitten.brain.openapi_parser import OpenAPIParser
@@ -36,6 +38,7 @@ class AgentState(TypedDict):
     planned_attacks: list[dict]
     results: list[dict]
     findings: list[dict]
+    business_logic_findings: list[dict]
 
 
 def parse_openapi(state: AgentState) -> dict:
@@ -59,10 +62,72 @@ def plan_attacks(state: AgentState) -> dict:
     return {"planned_attacks": planner.plan_attacks(endpoint)}
 
 
+async def test_business_logic(state: AgentState, executor: Executor) -> dict:
+    """Test endpoint for business logic vulnerabilities.
+    
+    This includes:
+    - Race conditions
+    - Workflow bypass
+    - Authorization flaws
+    - Price manipulation
+    """
+    idx = state["current_endpoint"]
+    if idx >= len(state["endpoints"]):
+        return {
+            "business_logic_findings": state["business_logic_findings"],
+            "current_endpoint": idx,
+        }
+
+    endpoint = state["endpoints"][idx]
+    attacker = BusinessLogicAttacker(executor)
+    new_bl_findings = []
+
+    try:
+        # Load business logic attack profiles
+        planner = AttackPlanner([endpoint])
+        
+        # Find business logic profiles
+        for profile in planner.attack_profiles:
+            if not profile.attack_type:
+                continue
+                
+            logger.debug(f"Testing {profile.name} for {endpoint.get('path')}")
+            
+            # Test the endpoint with this profile
+            vulnerabilities = await attacker.test_endpoint(endpoint, profile)
+            
+            # Convert vulnerability objects to dicts
+            for vuln in vulnerabilities:
+                new_bl_findings.append({
+                    "type": "business-logic",
+                    "attack_type": vuln.attack_type.value,
+                    "title": vuln.vulnerability_name,
+                    "description": vuln.description,
+                    "severity": vuln.severity,
+                    "endpoint": vuln.endpoint,
+                    "method": vuln.method,
+                    "evidence": vuln.evidence,
+                    "proof_of_concept": vuln.proof_of_concept,
+                    "remediation": vuln.remediation,
+                })
+                
+    except Exception as e:
+        logger.error(f"Failed to test business logic for {endpoint.get('path')}: {e}")
+
+    return {
+        "business_logic_findings": state["business_logic_findings"] + new_bl_findings,
+        "current_endpoint": idx,
+    }
+
+
 async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
     idx = state["current_endpoint"]
     if idx >= len(state["endpoints"]):
-        return {"findings": state["findings"], "current_endpoint": idx}
+        return {
+            "findings": state["findings"],
+            "business_logic_findings": state["business_logic_findings"],
+            "current_endpoint": idx,
+        }
 
     endpoint = state["endpoints"][idx]
     analyzer = ResponseAnalyzer()
@@ -141,12 +206,17 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> dict:
                 }
             )
 
-    return {"findings": state["findings"] + new_findings, "current_endpoint": idx + 1}
+    return {
+        "findings": state["findings"] + new_findings,
+        "business_logic_findings": state["business_logic_findings"],
+        "current_endpoint": idx + 1,
+    }
 
 
-def should_continue(state: AgentState) -> Literal["plan", "end"]:
+def should_continue(state: AgentState) -> Literal["test_bl", "end"]:
+    """Determine next action: test business logic or end."""
     if state["current_endpoint"] < len(state["endpoints"]):
-        return "plan"
+        return "test_bl"
     return "end"
 
 
@@ -171,13 +241,17 @@ class Orchestrator:
         workflow.add_node(
             "execute_analyze", partial(execute_and_analyze, executor=executor)
         )
+        workflow.add_node(
+            "test_bl", partial(test_business_logic, executor=executor)
+        )
 
         workflow.add_edge(START, "parse")
         workflow.add_edge("parse", "plan")
         workflow.add_edge("plan", "execute_analyze")
+        workflow.add_edge("execute_analyze", "test_bl")
 
         workflow.add_conditional_edges(
-            "execute_analyze", should_continue, {"plan": "plan", "end": END}
+            "test_bl", should_continue, {"test_bl": "plan", "end": END}
         )
         return workflow.compile()
 
@@ -233,6 +307,7 @@ class Orchestrator:
                     "planned_attacks": [],
                     "results": [],
                     "findings": [],
+                    "business_logic_findings": [],
                 }
 
                 app = self._build_graph(executor)
@@ -246,7 +321,7 @@ class Orchestrator:
                             progress.update(
                                 scan_task, total=len(state_update["endpoints"])
                             )
-                        if node_name == "execute_analyze":
+                        if node_name in ["execute_analyze", "test_bl"]:
                             progress.advance(scan_task)
 
         reporter_cfg = self.config.get("reporting", {})
@@ -255,8 +330,11 @@ class Orchestrator:
             output_format=reporter_cfg.get("format", "html"),
         )
 
+        # Combine all findings (standard + business logic)
+        all_vulnerabilities = final_state["findings"] + final_state["business_logic_findings"]
+
         report_file = reporter.generate(
-            {"vulnerabilities": final_state["findings"]}, target_url
+            {"vulnerabilities": all_vulnerabilities}, target_url
         )
 
         console.print("\n[bold green]Scan Complete![/bold green]")
@@ -265,10 +343,12 @@ class Orchestrator:
         )
 
         return {
-            "vulnerabilities": final_state["findings"],
+            "vulnerabilities": all_vulnerabilities,
+            "standard_vulnerabilities": len(final_state["findings"]),
+            "business_logic_vulnerabilities": len(final_state["business_logic_findings"]),
             "summary": {
                 "total_endpoints": len(final_state["endpoints"]),
                 "tested_endpoints": final_state["current_endpoint"],
-                "vulnerabilities_found": len(final_state["findings"]),
+                "vulnerabilities_found": len(all_vulnerabilities),
             },
         }
