@@ -10,24 +10,34 @@ requires_state: false
 concurrent_requests: 1
 timing_sensitive: false
 
-# Fields related to pricing
+# Fields related to pricing - expanded to include total, amount, cost, subtotal, fee
 target_fields:
   - "price"
   - "amount"
+  - "total"
+  - "cost"
+  - "subtotal"
+  - "fee"
   - "discount"
   - "coupon"
   - "promo"
   - "code"
   - "tax"
-  - "fee"
   - "shipping"
-  - "total"
   - "coupon_code"
   - "discount_percent"
   - "discount_amount"
   - "currency"
   - "quantity"
   - "unit_price"
+  - "grand_total"
+  - "net_amount"
+  - "gross_amount"
+  - "final_price"
+  - "base_price"
+  - "service_fee"
+  - "handling_fee"
+  - "processing_fee"
 
 # Payloads for price manipulation
 payloads:

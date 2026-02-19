@@ -172,6 +172,7 @@ class BusinessLogicAttacker:
         except Exception as e:
             logger.error(f"Failed to test race condition at {path}: {e}")
 
+        self.vulnerabilities.extend(vulnerabilities)
         return vulnerabilities
 
     async def test_workflow_bypass(
@@ -250,6 +251,7 @@ class BusinessLogicAttacker:
         except Exception as e:
             logger.error(f"Failed to test workflow bypass at {path}: {e}")
 
+        self.vulnerabilities.extend(vulnerabilities)
         return vulnerabilities
 
     async def test_authorization_bypass(
@@ -286,8 +288,14 @@ class BusinessLogicAttacker:
 
                         # Check if authorization was bypassed
                         if status_code == 200:
-                            # Verify this wasn't supposed to succeed
-                            if "admin" in field and "true" in str(payload).lower():
+                            # Check for privilege escalation indicators
+                            is_admin_field = "admin" in field.lower() or field.lower() in ["role", "user_type", "type", "level"]
+                            is_escalation_payload = (
+                                str(payload).lower() in ["true", "1", "yes", "admin", "superuser", "root", "owner", "manager"]
+                                or str(payload).lower() in ["administrator", "staff", "system", "service", "999", "9999"]
+                            )
+                            if is_admin_field and is_escalation_payload:
+
                                 vulnerability = BusinessLogicVulnerability(
                                     attack_type=BusinessLogicAttackType.AUTHORIZATION_BYPASS,
                                     endpoint=f"{method} {path}",
@@ -315,6 +323,7 @@ class BusinessLogicAttacker:
         except Exception as e:
             logger.error(f"Failed to test authorization bypass at {path}: {e}")
 
+        self.vulnerabilities.extend(vulnerabilities)
         return vulnerabilities
 
     async def test_price_manipulation(
@@ -341,8 +350,10 @@ class BusinessLogicAttacker:
             # Test each payload for price manipulation
             for payload in profile.payloads:
                 for field in profile.target_fields:
-                    if "price" not in field.lower() and "discount" not in field.lower():
+                    price_related_fields = ["price", "discount", "total", "amount", "cost", "subtotal", "fee"]
+                    if not any(price_field in field.lower() for price_field in price_related_fields):
                         continue
+
 
                     try:
                         response = await self.executor.execute_attack(
@@ -394,6 +405,7 @@ class BusinessLogicAttacker:
         except Exception as e:
             logger.error(f"Failed to test price manipulation at {path}: {e}")
 
+        self.vulnerabilities.extend(vulnerabilities)
         return vulnerabilities
 
     async def test_endpoint(

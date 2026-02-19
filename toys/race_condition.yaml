@@ -63,5 +63,5 @@ remediation: |
   - Use idempotency tokens for critical operations
 
 references:
-  - "https://owasp.org/www-community/attacks/Race_condition"
-  - "https://cheatsheetseries.owasp.org/cheatsheets/Race_Condition.html"
+  - "https://owasp.org/www-community/attacks/Race_Conditions"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Transaction_Safety_Cheat_Sheet.html"

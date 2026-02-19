@@ -21,6 +21,9 @@ target_fields:
   - "verification_step"
   - "approval_stage"
   - "current_step"
+  - "state"
+  - "process_step"
+  - "workflow_step"
 
 # Payloads for workflow manipulation
 payloads:
@@ -33,13 +36,21 @@ payloads:
   - "delivered"
   - "confirmed"
   - "final"
+  - "done"
+  - "success"
+  - "active"
+  - "enabled"
 
 success_indicators:
-  # Successfully skipped required steps
+  # Successfully skipped required steps - narrowed to reduce false positives
   response_contains:
-    - "success"
-    - "created"
-    - "confirmed"
+    - "workflow.*bypassed"
+    - "step.*skipped"
+    - "state.*changed"
+    - "status.*updated"
+    - "process.*completed"
+    - "order.*confirmed"
+    - "payment.*processed"
   status_codes:
     - 200  # Successful state change when it shouldn't be
     - 201  # Resource created despite incomplete workflow
@@ -73,5 +84,5 @@ remediation: |
   - Implement audit trails for workflow changes
 
 references:
-  - "https://owasp.org/www-community/attacks/Reverse_Engineering"
-  - "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+  - "https://owasp.org/www-community/attacks/Business_logic_attacks"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"

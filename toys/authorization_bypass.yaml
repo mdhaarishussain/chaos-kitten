@@ -20,22 +20,50 @@ target_fields:
   - "privilege"
   - "admin"
   - "is_admin"
+  - "isAdmin"
   - "user_type"
   - "account_type"
   - "organization_id"
   - "team_id"
+  - "group_id"
+  - "level"
+  - "type"
 
-# Payloads for authorization bypass attempts
+# Payloads for authorization bypass attempts - expanded to catch more combinations
 payloads:
-  # Attempt to escalate privileges
-  - "admin"
+  # Boolean privilege escalation
   - "true"
+  - "True"
+  - "TRUE"
+  - "1"
+  - "yes"
+  - "Yes"
+  - "YES"
+  
+  # Role-based escalation
+  - "admin"
+  - "administrator"
   - "superuser"
+  - "root"
   - "owner"
   - "manager"
-  - "1"
+  - "moderator"
+  - "staff"
+  - "system"
+  - "service"
+  
+  # Numeric privilege levels
   - "0"
+  - "999"
+  - "9999"
+  - "-1"
+  - "100"
+  
+  # Empty/null attempts
   - ""
+  - "null"
+  - "undefined"
+  - "none"
   
   # Attempt to access other users' resources
   - "{{ user_id }}"
@@ -44,11 +72,15 @@ payloads:
   - "${other_user_id}"
 
 success_indicators:
-  # Successfully accessed unauthorized resources
+  # Successfully accessed unauthorized resources - narrowed to reduce false positives
   response_contains:
-    - "success"
-    - "data"
-    - "result"
+    - "admin"
+    - "superuser"
+    - "privilege"
+    - "role.*admin"
+    - "access.*granted"
+    - "permission.*elevated"
+    - "unauthorized.*access"
   status_codes:
     - 200  # Successful unauthorized access
   # Should NOT contain: 403, 401, "Forbidden", "Unauthorized"
