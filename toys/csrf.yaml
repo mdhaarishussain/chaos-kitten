@@ -1,0 +1,54 @@
+
+name: "CSRF - Cross-Site Request Forgery"
+category: "session-management"
+severity: "high"
+description: "Tests for cross-site request forgery vulnerabilities by attempting unauthorized state-changing requests"
+
+# Fields commonly involved in CSRF attacks
+target_fields:
+  - "form"
+  - "request"
+  - "action"
+  - "submit"
+  - "transfer"
+  - "update"
+  - "delete"
+  - "change_email"
+  - "change_password"
+
+# Attack payloads to test
+payloads:
+  # Auto-submit form attacks
+  - "<form action='/transfer' method='POST'><input name='amount' value='1000'></form>"
+  - "<form action='/change-email' method='POST'><input name='email' value='attacker@example.com'></form>"
+
+  # Image-based GET request
+  - "<img src='/delete-account'>"
+
+  # JavaScript fetch attempts
+  - "<script>fetch('/api/transfer',{method:'POST',credentials:'include',body:'amount=1000'})</script>"
+  - "<script>fetch('/api/update-role',{method:'POST',credentials:'include',body:'role=admin'})</script>"
+
+# Indicators that suggest successful CSRF
+success_indicators:
+  response_contains:
+    - "transaction"
+    - "completed"
+    - "success"
+    - "updated"
+    - "changed successfully"
+  status_codes:
+    - 200
+    - 302
+
+# How to fix this vulnerability
+remediation: |
+  Implement anti-CSRF tokens for all state-changing requests.
+  Validate Origin and Referer headers server-side.
+  Use SameSite cookie attributes (Strict or Lax).
+  Avoid using GET requests for sensitive actions.
+  Require re-authentication or confirmation for critical operations.
+
+references:
+  - "https://owasp.org/www-community/attacks/csrf"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"

@@ -1,6 +1,9 @@
 """Tests for the Paws module."""
 
 import asyncio
+import tempfile
+from pathlib import Path
+
 import pytest
 import httpx
 import respx
@@ -294,3 +297,231 @@ class TestExecutor:
         # We can't easily check if it's closed, but we can verify it exists
         assert executor._client is not None
 
+
+class TestBrowserAutomation:
+    """Tests for the browser automation module."""
+    
+    def test_initialization(self):
+        """Test default initialization."""
+        browser = BrowserAutomation(headless=True)
+        assert browser.headless is True
+        assert browser._browser is None
+        assert browser._context is None
+        assert browser._playwright is None
+        
+        browser_visible = BrowserAutomation(headless=False)
+        assert browser_visible.headless is False
+
+    def test_initialization_with_timeout(self):
+        """Test initialization with custom timeout."""
+        browser = BrowserAutomation(headless=True, timeout=5000)
+        assert browser.timeout == 5000
+
+    @pytest.mark.asyncio
+    async def test_xss_detection_script_tag(self):
+        """Test XSS detection with <script>alert()</script> payload.
+
+        Note: <script> tags injected via innerHTML do NOT execute per HTML5 spec.
+        We use document.write() in the test page so that the <script> payload
+        actually runs and fires the dialog handler in BrowserAutomation.test_xss.
+        """
+        pytest.importorskip("playwright")
+
+        # Uses document.write() which *does* execute <script> tags
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    // Vulnerable - document.write executes <script> tags
+                    document.write(input);
+                });
+            </script>
+        </body>
+        </html>
+        """
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
+
+        screenshot_path = None
+        with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
+            try:
+                async with BrowserAutomation(headless=True) as browser:
+                    result = await browser.test_xss(
+                        url=f"file://{test_file}",
+                        payload="<script>alert('XSS')</script>",
+                        input_selector="#test-input",
+                        screenshot_dir=tmp_screenshot_dir,
+                    )
+
+                    # Verify the result structure
+                    assert "is_vulnerable" in result
+                    assert "screenshot_path" in result
+                    assert "error" in result
+
+                    # The XSS payload should trigger a dialog
+                    assert result["is_vulnerable"] is True
+
+                    # Screenshot should be captured on vulnerability detection
+                    screenshot_path = result["screenshot_path"]
+                    if screenshot_path:
+                        assert Path(screenshot_path).exists()
+            finally:
+                Path(test_file).unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_xss_detection_event_handler(self):
+        """Test XSS detection with event handler (onerror) payload."""
+        pytest.importorskip("playwright")
+
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    document.getElementById('output').innerHTML = input;
+                });
+            </script>
+        </body>
+        </html>
+        """
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
+
+        with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
+            try:
+                async with BrowserAutomation(headless=True) as browser:
+                    result = await browser.test_xss(
+                        url=f"file://{test_file}",
+                        payload="<img src=x onerror=alert('XSS')>",
+                        input_selector="#test-input",
+                        screenshot_dir=tmp_screenshot_dir,
+                    )
+
+                    assert result["is_vulnerable"] is True
+                    assert result["error"] is None
+            finally:
+                Path(test_file).unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_no_vulnerability_safe_input(self):
+        """Test that safe input is not flagged as vulnerable."""
+        pytest.importorskip("playwright")
+
+        test_html = """
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <form id="test-form">
+                <input id="test-input" name="user_input">
+                <button type="submit">Submit</button>
+            </form>
+            <div id="output"></div>
+            <script>
+                document.getElementById('test-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const input = document.getElementById('test-input').value;
+                    // Safe - using textContent instead of innerHTML
+                    document.getElementById('output').textContent = input;
+                });
+            </script>
+        </body>
+        </html>
+        """
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
+
+        try:
+            async with BrowserAutomation(headless=True) as browser:
+                result = await browser.test_xss(
+                    url=f"file://{test_file}",
+                    payload="<script>alert('XSS')</script>",
+                    input_selector="#test-input"
+                )
+
+                # Safe page (textContent) should not trigger XSS
+                assert result["error"] is None
+                assert result["is_vulnerable"] is False
+        finally:
+            Path(test_file).unlink(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_context_manager_cleanup(self):
+        """Test that browser resources are properly cleaned up."""
+        pytest.importorskip("playwright")
+
+        browser = BrowserAutomation(headless=True)
+
+        async with browser:
+            assert browser._browser is not None
+            assert browser._context is not None
+            assert browser._playwright is not None
+
+        # After exiting, browser should be disconnected
+        assert browser._browser is not None
+        assert browser._browser.is_connected() is False
+
+    @pytest.mark.asyncio
+    async def test_error_handling_invalid_url(self):
+        """Test error handling with invalid URL."""
+        pytest.importorskip("playwright")
+        
+        async with BrowserAutomation(headless=True) as browser:
+            result = await browser.test_xss(
+                url="http://invalid-url-that-does-not-exist-12345.com",
+                payload="<script>alert('XSS')</script>",
+            )
+            
+            # Should return error instead of raising
+            assert result["is_vulnerable"] is False
+            assert result["error"] is not None
+
+    @pytest.mark.asyncio
+    async def test_selector_not_found(self):
+        """Test error handling when input selector doesn't exist."""
+        pytest.importorskip("playwright")
+
+        test_html = """
+        <!DOCTYPE html>
+        <html><body><p>No input here</p></body></html>
+        """
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            f.write(test_html)
+            test_file = f.name
+
+        try:
+            async with BrowserAutomation(headless=True) as browser:
+                result = await browser.test_xss(
+                    url=f"file://{test_file}",
+                    payload="<script>alert('XSS')</script>",
+                    input_selector="#nonexistent-input"
+                )
+
+                assert result["is_vulnerable"] is False
+                assert result["error"] is not None
+                assert "not found" in result["error"].lower()
+        finally:
+            Path(test_file).unlink(missing_ok=True)
