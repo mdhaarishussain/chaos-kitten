@@ -27,6 +27,7 @@ class Executor:
     async def execute(
         self,
         method: str,
+<<<<<<< 122
         url: str,
         payload: dict[str, Any] | None = None,
         location: str = "body",
@@ -40,6 +41,22 @@ class Executor:
             url: Target URL
             payload: Payload to send
             location: Where to place the payload (query, body, header, cookie, path)
+=======
+        path: str,
+        payload: Optional[Dict[str, Any]] = None,
+        files: Optional[Dict[str, Any]] = None,
+        graphql_query: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Execute an attack request.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            path: API endpoint path
+            payload: Request body/parameters
+            files: Files to upload (for multipart/form-data)
+            graphql_query: Raw GraphQL query string (will be wrapped in JSON)
+>>>>>>> main
             headers: Additional headers
             **kwargs: Additional arguments for httpx
             
@@ -75,9 +92,64 @@ class Executor:
                     request_kwargs["cookies"] = payload
 
         try:
+<<<<<<< 122
             async with httpx.AsyncClient() as client:
                 response = await client.request(method.upper(), url, **request_kwargs)
 
+=======
+            # Execute request based on method
+            if method == "GET":
+                response = await self._client.get(
+                    path,
+                    params=payload,
+                    headers=request_headers,
+                )
+            elif method in ("POST", "PUT", "PATCH"):
+                # Handle GraphQL
+                if graphql_query:
+                    # GraphQL is typically POST-only; warn if a different method was requested
+                    if method != "POST":
+                        logger.debug(
+                            "GraphQL queries are typically sent via POST, "
+                            "but '%s' was requested for %s", method, path
+                        )
+                    # GraphQL usually expects {"query": "...", "variables": {...}}
+                    # payload can be used for variables if provided
+                    json_body = {"query": graphql_query}
+                    if payload:
+                        json_body["variables"] = payload
+                    
+                    response = await self._client.request(
+                        method,
+                        path,
+                        json=json_body,
+                        headers=request_headers,
+                    )
+                # Handle multipart/form-data vs json
+                elif files:
+                    # If files are present, payload usually goes into 'data' form fields
+                    # httpx handles boundary and content-type for files automatically
+                    response = await self._client.request(
+                        method,
+                        path,
+                        data=payload, # Form fields
+                        files=files,  # File uploads
+                        headers=request_headers,
+                    )
+                else:
+                    response = await self._client.request(
+                        method,
+                        path,
+                        json=payload,
+                        headers=request_headers,
+                    )
+            elif method == "DELETE":
+                response = await self._client.delete(
+                    path,
+                    headers=request_headers,
+                )
+            else:
+>>>>>>> main
                 return {
                     "status": response.status_code,
                     "body": response.text,
@@ -86,6 +158,7 @@ class Executor:
                     "url": str(response.url),
                     "reason": response.reason_phrase,
                 }
+<<<<<<< 122
         except asyncio.TimeoutError:
             return {
                 "status": 0,
@@ -105,3 +178,85 @@ class Executor:
                 "url": url,
                 "reason": "Error",
             }
+=======
+            
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            
+            return {
+                "status_code": response.status_code,
+                "headers": dict(response.headers),
+                "body": response.text,
+                "elapsed_ms": elapsed_ms,
+                "error": None,
+            }
+            
+        except httpx.TimeoutException as e:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            error_msg = f"Request timeout: {str(e)}"
+            logger.warning(f"Timeout executing {method} {path}: {e}")
+            return {
+                "status_code": 0,
+                "headers": {},
+                "body": "",
+                "elapsed_ms": elapsed_ms,
+                "error": error_msg,
+            }
+            
+        # ... (rest of exception handling remains similar, ensuring closing indent)
+        except httpx.ConnectError as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"Connection error: {str(e)}"
+             logger.warning(f"Connection error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+             
+        except httpx.HTTPError as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"HTTP error: {str(e)}"
+             logger.warning(f"HTTP error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+             
+        except Exception as e:
+             elapsed_ms = (time.perf_counter() - start_time) * 1000
+             error_msg = f"Unexpected error: {str(e)}"
+             logger.warning(f"Unexpected error executing {method} {path}: {e}")
+             return {
+                 "status_code": 0,
+                 "headers": {},
+                 "body": "",
+                 "elapsed_ms": elapsed_ms,
+                 "error": error_msg,
+             }
+    
+    async def _apply_rate_limit(self) -> None:
+        """Apply rate limiting using token bucket algorithm."""
+        if not self._rate_limiter:
+            return
+        
+        # Acquire semaphore token
+        async with self._rate_limiter:
+            # Calculate time since last request
+            current_time = time.perf_counter()
+            time_since_last = current_time - self._last_request_time
+            
+            # Minimum time between requests (in seconds)
+            min_interval = 1.0 / self.rate_limit if self.rate_limit > 0 else 0
+            
+            # Sleep if we're going too fast
+            if time_since_last < min_interval:
+                await asyncio.sleep(min_interval - time_since_last)
+            
+            # Update last request time
+            self._last_request_time = time.perf_counter()
+>>>>>>> main
