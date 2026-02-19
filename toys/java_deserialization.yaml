@@ -5,25 +5,21 @@ severity: "critical"
 description: "Tests for Java deserialization vulnerabilities using common gadget chains. Targets ObjectInputStream, JSON libraries (Jackson, Fastjson), and XML decoders."
 
 target_fields:
-  - "data"
-  - "object"
   - "serialized"
-  - "json"
-  - "xml"
-  - "body"
-  - "content"
-  - "payload"
-  - "input"
-  - "request"
-  - "message"
-  - "event"
-  - "state"
-  - "session"
-  - "cache"
-  - "metadata"
-  - "config"
-  - "settings"
-  - "preferences"
+  - "serialized_data"
+  - "object_data"
+  - "encoded_object"
+  - "marshalled"
+  - "marshal"
+  - "deserialized"
+  - "deserialize"
+  - "restore"
+  - "hydrate"
+  - "inject_object"
+  - "java_object"
+  - "javaobj"
+  - "gadget"
+  - "chain"
 
 payloads:
   # Java serialized object magic bytes (ac.ed) base64 encoded
@@ -46,10 +42,10 @@ payloads:
   - "rO0ABXNyABNqYXZhLnV0aWwuSGFzaFNldLpEhZWWuLc0AwADSQAHbG9hZEZhY3RvckkACXRocmVzaG9sZHg="
   
   # CommonsCollections6 - TiedMapEntry
-  - "rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcE7QfJcEYP7EAgADSQAGbG9hZEZhY3RvckkACXRocmVzaG9sZHg="
+  - "rO0ABXNyABFqYXZhLnV0aWwuVHJlZU1hcE5O3RuFe3yYTgIAA0wABmNvbXBhcmF0b3J0ABZMamF2YS91dGlsL0NvbXBhcmF0b3I7eHBzcgA+b3JnLmFwYWNoZS5jb21tb25zLmJlYW51dGlscy5CZWFuQ29tcGFyYXRvcu7EAUpLxVzPBLQCAAB4cHNyADpvcmcuYXBhY2hlLmNvbW1vbnMuY29sbGVjdGlvbnMubWFwLkxhenlNYXBu"
   
   # CommonsBeanutils1 - PropertyUtils
-  - "rO0ABXNyABNqYXZhLnV0aWwuQXJyYXlMaXN0eIHSHVNZLAWXAgADSQAGc2l6ZVppABdJAAxtb2RDb3VudABMWn0ABXNyABFqYXZhLmxhbmcuSW50ZWdlchLioKT3gYBZ4CAAAAB4cHcEAAAAAXg="
+  - "rO0ABXNyABNqYXZhLnV0aWwuQXJyYXlMaXN0eIHSHVNZLAWXAgADSQAGc2l6ZVppABdJAAxtb2RDb3VudABMV30ABXNyABFqYXZhLmxhbmcuSW50ZWdlchLioKT3gYBZ4CAAAAB4cHcEAAAAAXg="
   
   # CommonsBeanutils2 - BeanComparator
   - "rO0ABXNyABNqYXZhLnV0aWwuVHJlZVNldJjdG4V7fJhOAgADTAAGY29tcGFyYXRvcg=="

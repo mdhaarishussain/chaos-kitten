@@ -373,12 +373,13 @@ class AttackPlanner:
             )
 
         unique_attacks: list[dict[str, Any]] = []
-        seen: set[tuple[str, str, str]] = set()
+        seen: set[tuple[str, str, str, int]] = set()
         for attack in attacks:
             key = (
                 str(attack.get("profile_name", "")),
                 str(attack.get("field", "")),
                 str(attack.get("location", "")),
+                hash(str(attack.get("payload", ""))),
             )
             if key in seen:
                 continue
@@ -773,10 +774,13 @@ class AttackPlanner:
                 if payload.startswith(("rO0AB", "rO0AC")):
                     filtered_payloads.append(payload)
                 # JSON/Fastjson gadget chains
-                elif payload.startswith("{") or payload.startswith("<"):
+                elif payload.startswith("{") and "java" in payload.lower():
+                    filtered_payloads.append(payload)
+                # XML payloads
+                elif payload.startswith("<java") or "<runtime>" in payload or "<process" in payload:
                     filtered_payloads.append(payload)
                 # JNDI, JRMP, etc.
-                elif any(x in payload for x in ["jndi:", "jrmp:", "ldap://", "rmi://"]):
+                elif any(x in payload for x in ["jndi:", "jrmp:", "ldap://", "rmi://", "javax.script"]):
                     filtered_payloads.append(payload)
             
             # Python payloads: pickle, YAML, jsonpickle
@@ -784,30 +788,34 @@ class AttackPlanner:
                 # Pickle protocol markers or YAML tags
                 if payload.startswith(("80", "(S", "gASV", "!!")):
                     filtered_payloads.append(payload)
-                # YAML tags
-                elif "!!python" in payload or "!!yaml" in payload:
+                # YAML tags with python
+                elif "!!python" in payload:
                     filtered_payloads.append(payload)
                 # jsonpickle format
                 elif "py/object" in payload or "py/args" in payload:
                     filtered_payloads.append(payload)
-                # Python string execution
-                elif "os.system" in payload or "subprocess" in payload:
+                # Python string execution - os.system, subprocess, exec, eval
+                elif any(x in payload for x in ["os.system", "subprocess", "builtins.exec", "builtins.eval"]):
                     filtered_payloads.append(payload)
             
             # PHP payloads: serialized format
             elif language == "php":
                 # PHP serialize format: O: (object), s: (string), a: (array), etc.
-                if any(x in payload for x in ["O:", "s:", "a:", "i:", "b:", "d:", "N;"]):
+                if any(x in payload for x in ["O:", "s:", "a:", "i:", "b:", "d:", "N;", "R:", "C:"]):
                     filtered_payloads.append(payload)
-                # Basic PHP strings
-                elif not payload.startswith(("{", "rO0AB", "80", "!!")):
+                # Phar/PHP wrappers
+                elif any(x in payload for x in ["phar://", "php://", "data://", "file://", "compress.", "zip://", "rar://"]):
+                    filtered_payloads.append(payload)
+                # Base64 encoded PHP serialized objects
+                elif payload.startswith(("Tzo", "YTo", "U1M")):  # Base64 prefixes for PHP serialized
                     filtered_payloads.append(payload)
         
-        # If we filtered out everything, return all payloads (fallback)
-        if not filtered_payloads:
-            return all_payloads[:10]  # Limit to 10 to prevent explosion
+        # Only return filtered payloads if we found language-specific ones
+        if filtered_payloads:
+            return filtered_payloads[:10]  # Limit to 10 to prevent explosion
         
-        return filtered_payloads
+        # If no language-specific payloads found, return empty list rather than all
+        return []
 
     def _plan_file_upload_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
         """Plan file upload bypass attacks for upload endpoints.
