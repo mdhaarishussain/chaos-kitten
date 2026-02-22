@@ -1,0 +1,85 @@
+name: "Rate Limiting & Account Lockout Bypass"
+category: "rate-limiting"
+severity: "high"
+description: "Tests for rate limit bypass techniques that allow attackers to evade IP-based throttling and account lockout controls."
+
+# target_fields: the HTTP header names or request fields that will carry your payloads
+target_fields:
+  - "x-forwarded-for"
+  - "x-real-ip"
+  - "user-agent"
+  - "client-id"
+  - "x-client-ip"
+  - "forwarded"
+  - "x-originating-ip"
+  - "cf-connecting-ip"
+  - "true-client-ip"
+
+# payloads: the actual values you will inject — these are the "attack strings"
+payloads:
+  # Category 1: Header Manipulation
+  - "127.0.0.1"
+  - "::1"
+  - ""              # empty string
+  - "0.0.0.0"
+  - "localhost"
+  - "192.168.1.1"
+  - "10.0.0.1"
+  - "172.16.0.1"
+  # Note: Potential IMDS/SSRF probe.
+  - "169.254.169.254"
+
+  # Category 2: Multi-Header Bypass
+  # (These are tested by applying Category 1 payloads to the target_fields above)
+  - "127.0.0.1, 10.0.0.1"
+  - "192.168.1.1, 127.0.0.1"
+  - "8.8.8.8, 1.1.1.1"
+
+  # Category 3: Parameter Variation (Add 4+)
+  - "Mozilla/5.0 (compatible; Googlebot/2.1)"
+  - "ChaosKitten/1.0"
+  - "client-id-001"
+  - "null"
+
+  # Category 4: Account Lockout Bypass (Add 5+)
+  - "admin " # Trailing space
+  - "admin\t" # Tab character
+  - "ADMIN" # Case variation
+  - "adm\u00efn" # Unicode lookalike
+  - " admin" # Leading space
+
+  # Category 5: Timing / Distributed Bypass
+  - "chaos-bypass-001"        # Unique request ID value to probe counter-reset per ID
+  - "chaos-bypass-002"
+  - "0"                       # Attempt to override RateLimit-Remaining hint
+  - "9999"                    # Attempt to spoof limit hint value
+  - "bypass-seq-{{random}}"   # Placeholder for sequential/random ID if runner supports it
+
+  # Category 6: Cache Bypass
+  - "no-cache"
+  - "no-store, must-revalidate"
+  - "max-age=0"
+  - "no-cache, no-store, private"
+  - "must-revalidate, proxy-revalidate"
+  - "s-maxage=0"
+
+# success_indicators: how Chaos Kitten knows the attack worked
+success_indicators:
+  status_codes:
+    - 200
+    - 201
+  response_contains:
+    - "success"
+    - "logged in"
+    - "token"
+
+# remediation: what the developer should do to fix this vulnerability
+remediation: |
+  Never trust client-supplied IP headers (X-Forwarded-For, X-Real-IP) for rate limiting.
+  Use the actual TCP connection IP available at the server/load balancer level to ensure the source is verified.
+  Additionally, implement consistent normalization (canonicalization) of identifiers like usernames to prevent bypasses using whitespace or case variations.
+
+# references: official sources (OWASP, CWE IDs)
+references:
+  - "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/"
+  - "https://cwe.mitre.org/data/definitions/307.html"

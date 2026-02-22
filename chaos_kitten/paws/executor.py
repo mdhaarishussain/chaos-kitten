@@ -89,6 +89,7 @@ class Executor:
         path: str,
         payload: Optional[Dict[str, Any]] = None,
         files: Optional[Dict[str, Any]] = None,
+        graphql_query: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Execute an attack request.
@@ -98,7 +99,7 @@ class Executor:
             path: API endpoint path
             payload: Request body/parameters
             files: Files to upload (for multipart/form-data)
-                   Format: {'field_name': ('filename', content, 'content_type')}
+            graphql_query: Raw GraphQL query string (will be wrapped in JSON)
             headers: Additional headers
 
         Returns:
@@ -134,8 +135,28 @@ class Executor:
                     headers=request_headers,
                 )
             elif method in ("POST", "PUT", "PATCH"):
+                # Handle GraphQL
+                if graphql_query:
+                    # GraphQL is typically POST-only; warn if a different method was requested
+                    if method != "POST":
+                        logger.debug(
+                            "GraphQL queries are typically sent via POST, "
+                            "but '%s' was requested for %s", method, path
+                        )
+                    # GraphQL usually expects {"query": "...", "variables": {...}}
+                    # payload can be used for variables if provided
+                    json_body = {"query": graphql_query}
+                    if payload:
+                        json_body["variables"] = payload
+                    
+                    response = await self._client.request(
+                        method,
+                        path,
+                        json=json_body,
+                        headers=request_headers,
+                    )
                 # Handle multipart/form-data vs json
-                if files:
+                elif files:
                     # If files are present, payload usually goes into 'data' form fields
                     # httpx handles boundary and content-type for files automatically
                     response = await self._client.request(

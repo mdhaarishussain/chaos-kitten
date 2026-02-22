@@ -1,0 +1,79 @@
+name: "Chaos Kitten Security Scan"
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '30 2 * * 0'  # Run weekly at 2:30 AM
+
+jobs:
+  chaos-kitten-scan:
+    name: Run Chaos Kitten
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # Required for uploading SARIF results
+      contents: read
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install Chaos Kitten
+        run: |
+          pip install --upgrade pip
+          pip install chaos-kitten
+          # Or install from local source if running in repo context
+          # pip install -e .
+
+      - name: Start Target Application (Example)
+        # Replace this step with your actual application startup command
+        run: |
+          # docker-compose up -d
+          # or 
+          # python app.py &
+          echo "Run your app here..."
+
+      - name: Run Security Scan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}  # Required if using adaptive features
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}        # Alternative
+        run: |
+          chaos-kitten scan \
+            --target "http://localhost:3000" \
+            --spec "./openapi.json" \
+            --output "./security-reports" \
+            --format sarif \
+            --fail-on high \
+            --silent
+
+      - name: Run JUnit Report Generation
+        if: always()
+        run: |
+            chaos-kitten scan \
+            --target "http://localhost:3000" \
+            --spec "./openapi.json" \
+            --output "./security-reports" \
+            --format junit \
+             --fail-on none \
+             --silent
+
+      - name: Upload SARIF Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()  # Upload results even if scan fails
+        with:
+          sarif_file: security-reports/results.sarif
+          category: chaos-kitten
+
+      - name: Upload JUnit Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-results
+          path: security-reports/*.xml

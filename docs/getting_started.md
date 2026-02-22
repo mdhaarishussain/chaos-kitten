@@ -21,7 +21,10 @@ pip install chaos-kitten
 ```bash
 git clone https://github.com/mdhaarishussain/chaos-kitten.git
 cd chaos-kitten
-pip install -e .
+pip install -e .        # Standard install (no browser)
+# Optional: browser exploit validation
+pip install -e .[browser]
+playwright install chromium
 ```
 
 ### Option 3: Docker (Recommended for Isolation)
@@ -99,6 +102,27 @@ ANTHROPIC_API_KEY=your_key_here
 chaos-kitten scan
 ```
 
+### 5. Use Natural Language Targeting (Optional)
+
+The `--goal` flag lets you describe what you want to test in plain English. Chaos Kitten's LLM will automatically select relevant endpoints and attack profiles based on your goal.
+
+**Example 1: Payment Security**
+```bash
+chaos-kitten scan --goal "find all endpoints that handle money or payments and check if prices can be manipulated"
+```
+
+**Example 2: Access Control**
+```bash
+chaos-kitten scan --goal "I want to check if admin endpoints are accessible to regular users"
+```
+
+**Example 3: Authentication Testing**
+```bash
+chaos-kitten scan --goal "test the authentication system for account takeover risks"
+```
+
+Without `--goal`, Chaos Kitten runs a full scan testing all endpoints. With `--goal`, the LLM prioritizes endpoints relevant to your security concern.
+
 ## Understanding Results
 
 ### Severity Levels
@@ -132,3 +156,38 @@ chaos-kitten scan
 
 - Open an [Issue](https://github.com/mdhaarishussain/chaos-kitten/issues)
 - Join our [Discussions](https://github.com/mdhaarishussain/chaos-kitten/discussions)
+
+## CI/CD Integration
+
+Integrate Chaos Kitten into your CI/CD pipeline to catch vulnerabilities early.
+
+### GitHub Actions
+
+We provide a ready-to-use GitHub Actions workflow.
+
+1. Create `.github/workflows/security-scan.yml`
+2. Copy the content from `examples/github-actions-workflow.yml`
+3. Configure secrets in your repository settings
+
+### GitLab CI/CD
+
+Add this job to your `.gitlab-ci.yml`:
+
+```yaml
+security_scan:
+  image: python:3.12
+  script:
+    - pip install chaos-kitten
+    - chaos-kitten scan --target $STAGING_URL --format junit --output reports --fail-on high --silent
+  artifacts:
+    reports:
+      junit: reports/*.xml
+```
+
+### CLI Flags for CI
+
+- `--format sarif`: Generates SARIF output for GitHub Advanced Security
+- `--format junit`: Generates XML output for CI test parsers
+- `--fail-on [medium|high|critical]`: Sets the exit code to 1 if vulnerabilities of this level or higher are found
+- `--silent`: Suppresses non-error console output
+

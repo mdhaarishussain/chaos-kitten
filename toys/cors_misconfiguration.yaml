@@ -1,0 +1,39 @@
+name: cors_misconfiguration
+description: Detect overly permissive CORS policies
+severity: medium
+category: misconfiguration
+payloads: []
+target_fields: []
+
+requests:
+  - method: GET
+    path: /
+    headers:
+      Origin: https://evil.example
+
+checks:
+  - id: wildcard_origin
+    description: Access-Control-Allow-Origin allows any origin
+    match:
+      header: Access-Control-Allow-Origin
+      value: "*"
+    severity: high
+
+  - id: credential_exposure
+    description: Credentials allowed with arbitrary origin
+    conditions:
+      - header: Access-Control-Allow-Origin
+        exists: true
+      - header: Access-Control-Allow-Credentials
+        value: "true"
+    severity: critical
+
+  - id: methods_exposed
+    description: Dangerous methods exposed
+    match:
+      header: Access-Control-Allow-Methods
+      contains_any:
+        - PUT
+        - DELETE
+        - PATCH
+    severity: medium

@@ -1,0 +1,60 @@
+# GraphQL Attack Profile
+# Tests for common GraphQL vulnerabilities
+
+name: "GraphQL Security"
+category: "graphql"
+severity: "medium"
+description: >
+  Tests for GraphQL specific vulnerabilities including introspection exposure,
+  query complexity usage, and batching attacks.
+
+# Fields commonly associated with GraphQL (though usually entire body is payload)
+target_fields:
+  - "query"
+  - "variables"
+
+# Attack payloads
+payloads:
+  # --- Introspection ---
+  # Standard introspection query to reveal schema
+  - "query { __schema { types { name fields { name } } } }"
+  
+  # --- Visualization / GraphiQL ---
+  # Attempt to access GraphiQL interface (usually GET or separate endpoint, but payload here for completeness)
+  # Not strictly a payload for POST body, but useful context.
+  
+  # --- Depth Limit Test ---
+  # Deeply nested query to test for lack of depth limiting
+  - "query { viewer { repositories { owner { repositories { owner { repositories { name } } } } } } }"
+  
+  # --- Alias Overloading / Batching (DoS) ---
+  # Multiple aliases to fetch same resource many times
+  - "query { a: viewer { name } b: viewer { name } c: viewer { name } d: viewer { name } e: viewer { name } }"
+  
+  # --- Field Suggestion / Typo ---
+  # Trigger "Did you mean..." suggestions which hint at valid fields
+  - "query { users { password } }"
+
+# Indicators that suggest successful exploitation
+success_indicators:
+  response_contains:
+    - "__schema"
+    - "IntrospectionQuery"
+    - "GenericScalar"
+    - "Did you mean"
+    - "__typename"  # GraphQL-specific type indicator
+  absence_of:
+    - "Query too complex"
+    - "Depth limit exceeded"
+    - "Introspection disabled"
+
+# How to fix this vulnerability
+remediation: |
+  1. **Disable Introspection**: In production, disable introspection queries to prevent schema enumeration.
+  2. **Query Depth Limiting**: Implement maximum query depth to prevent DoS.
+  3. **Query Complexity Analysis**: Assign costs to fields and limit total complexity.
+  4. **Disable Field Suggestions**: Turn off "Did you mean" suggestions in errors.
+  
+references:
+  - "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+  - "https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/GraphQL%20Injection"

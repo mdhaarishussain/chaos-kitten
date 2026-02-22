@@ -40,16 +40,18 @@ The Brain is the AI-powered orchestrator that coordinates all security testing.
 **Modules:**
 
 - `orchestrator.py` - Main agent logic using LangGraph
+- `recon.py` - Reconnaissance engine (subdomain enumeration, port scanning, fingerprinting)
 - `openapi_parser.py` - Parse OpenAPI/Swagger specs
 - `attack_planner.py` - Chain-of-Thought attack planning
 
 **How it works:**
 
-1. Parse the OpenAPI spec to understand API structure
-2. For each endpoint, reason about potential vulnerabilities
-3. Select appropriate attack profiles from the Toy Box
-4. Coordinate with the Paws to execute attacks
-5. Analyze responses and adapt strategy
+1. **Reconnaissance:** Discover subdomains, open ports, and technologies (optional)
+2. Parse the OpenAPI spec to understand API structure
+3. For each endpoint, reason about potential vulnerabilities
+4. Select appropriate attack profiles from the Toy Box
+5. Coordinate with the Paws to execute attacks
+6. Analyze responses and adapt strategy
 
 ### The Paws (`chaos_kitten/paws/`)
 

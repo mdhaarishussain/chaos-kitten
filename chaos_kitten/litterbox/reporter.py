@@ -1,12 +1,13 @@
 """Security Report Generator."""
 
+from pathlib import Path
+from typing import Any, Dict, List, Union
+from datetime import datetime
 import json
 import logging
-from datetime import datetime
-from pathlib import Path
-from typing import Any
-
-from jinja2 import Environment, FileSystemLoader, TemplateError, TemplateNotFound
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateError
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class Reporter:
 
     def __init__(
         self,
-        output_path: str | Path = "./reports",
+        output_path: Union[str, Path] = "./reports",
         output_format: str = "html",
         include_poc: bool = True,
         include_remediation: bool = True,
@@ -51,7 +52,7 @@ class Reporter:
 
     def generate(
         self,
-        scan_results: dict[str, Any],
+        scan_results: Dict[str, Any],
         target_url: str,
     ) -> Path:
         """Generate a security report.
@@ -104,6 +105,8 @@ class Reporter:
             (self.output_path / "results.json").write_text(
                 json.dumps(ci_json, indent=2), encoding="utf-8"
             )
+        elif self.output_format == "junit":
+             content = self._generate_junit(scan_results, target_url)
         else:
             content = self._generate_json(scan_results, target_url)
 
@@ -117,6 +120,7 @@ class Reporter:
             "markdown": "md",
             "json": "json",
             "sarif": "sarif",
+            "junit": "xml",
         }
         return extensions.get(self.output_format, "txt")
 
@@ -337,7 +341,7 @@ class Reporter:
 
         return processed
 
-    def _generate_html(self, results: dict[str, Any], target: str) -> str:
+    def _generate_html(self, results: Dict[str, Any], target: str) -> str:
         """Generate HTML report using Jinja2 template.
 
         Args:
@@ -387,7 +391,7 @@ class Reporter:
         except TemplateError as e:
             raise TemplateError(f"HTML template rendering failed: {e}") from e
 
-    def _generate_markdown(self, results: dict[str, Any], target: str) -> str:
+    def _generate_markdown(self, results: Dict[str, Any], target: str) -> str:
         """Generate Markdown report using Jinja2 template.
 
         Args:
@@ -452,7 +456,7 @@ class Reporter:
         except TemplateError as e:
             raise TemplateError(f"Markdown template rendering failed: {e}") from e
 
-    def _generate_json(self, results: dict[str, Any], target: str) -> str:
+    def _generate_json(self, results: Dict[str, Any], target: str) -> str:
         """Generate JSON report.
 
         Args:
@@ -486,7 +490,7 @@ class Reporter:
         except (ValueError, TypeError) as e:
             raise ValueError(f"Invalid vulnerability data for JSON export: {e}") from e
 
-    def _generate_sarif(self, results: dict[str, Any], target: str) -> str:
+    def _generate_sarif(self, results: Dict[str, Any], target: str) -> str:
         """Generate SARIF report.
 
         Args:
@@ -502,9 +506,7 @@ class Reporter:
         except Exception as e:
             raise ValueError(f"Failed to generate SARIF report: {e}") from e
 
-    def _generate_sarif_from_vulns(
-        self, vulnerabilities: list[dict[str, Any]], target: str
-    ) -> str:
+    def _generate_sarif_from_vulns(self, vulnerabilities: List[Dict[str, Any]], target: str) -> str:
         """Generate SARIF report from validated vulnerabilities.
 
         Args:
@@ -603,3 +605,68 @@ class Reporter:
             return "warning"
         else:
             return "note"
+
+    def _generate_junit(self, results: Dict[str, Any], target: str) -> str:
+        """Generate JUnit XML report.
+
+        Args:
+            results: Vulnerability scan results
+            target: Target URL that was scanned
+
+        Returns:
+            Generated JUnit XML report content
+        """
+        try:
+            vulnerabilities = self._validate_vulnerability_data(results)
+            summary = self._calculate_executive_summary(vulnerabilities)
+            
+            # Create root element <testsuites>
+            testsuites = ET.Element("testsuites")
+            testsuites.set("name", "Chaos Kitten Security Scan")
+            testsuites.set("tests", str(summary["total_vulnerabilities"]))
+            testsuites.set("failures", str(summary["severity_breakdown"]["critical"] + summary["severity_breakdown"]["high"]))
+            testsuites.set("time", "0")
+
+            for severity in ["critical", "high", "medium", "low"]:
+                count = summary["severity_breakdown"].get(severity, 0)
+                if count == 0:
+                    continue
+                    
+                suite = ET.SubElement(testsuites, "testsuite")
+                suite.set("name", f"Security Vulnerabilities - {severity.title()}")
+                suite.set("tests", str(count))
+                suite.set("failures", str(count) if severity in ["critical", "high"] else "0")
+                
+                severity_vulns = [v for v in vulnerabilities if v.get("severity", "medium").lower() == severity]
+                
+                for vuln in severity_vulns:
+                    testcase = ET.SubElement(suite, "testcase")
+                    testcase.set("name", vuln.get("title", "Unknown Vulnerability"))
+                    testcase.set("classname", f"Security.{severity.title()}.{vuln.get('type', 'generic')}")
+                    testcase.set("time", "0")
+                    
+                    if severity in ["critical", "high"]:
+                        failure = ET.SubElement(testcase, "failure")
+                        failure.set("message", vuln.get("description", ""))
+                        failure.set("type", vuln.get("type", "SecurityVulnerability"))
+                        failure.text = (
+                            f"Severity: {severity.upper()}\n"
+                            f"Endpoint: {vuln.get('endpoint', 'Unknown')}\n"
+                            f"Remediation: {vuln.get('remediation', '')}\n"
+                            f"Proof of Concept: {vuln.get('proof_of_concept', '')}"
+                        )
+                    else:
+                        system_out = ET.SubElement(testcase, "system-out")
+                        system_out.text = (
+                            f"Severity: {severity.upper()}\n"
+                            f"Description: {vuln.get('description', '')}\n"
+                            f"Endpoint: {vuln.get('endpoint', 'Unknown')}\n"
+                            f"Remediation: {vuln.get('remediation', '')}"
+                        )
+
+            xml_str = ET.tostring(testsuites, encoding="utf-8")
+            parsed = minidom.parseString(xml_str)
+            return parsed.toprettyxml(indent="  ")
+
+        except Exception as e:
+            raise ValueError(f"Failed to generate JUnit report: {e}") from e

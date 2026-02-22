@@ -179,8 +179,16 @@ class AttackPlanner:
 
         logger.info("Loaded %d attack profiles", len(self.attack_profiles))
 
-    def plan_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
-        """Plan attacks for a specific endpoint."""
+    def plan_attacks(self, endpoint: dict[str, Any], allowed_profiles: list[str] | None = None) -> list[dict[str, Any]]:
+        """Plan attacks for a specific endpoint.
+        
+        Args:
+            endpoint: The API endpoint to plan attacks for
+            allowed_profiles: Optional list of profile names to filter attacks by
+        
+        Returns:
+            List of planned attack dictionaries
+        """
         path = endpoint.get("path", "")
         method = endpoint.get("method", "GET")
         params = endpoint.get("parameters", [])
@@ -226,6 +234,14 @@ class AttackPlanner:
             attacks = self._plan_rule_based(endpoint)
 
         self._cache[cache_key] = attacks
+        
+        # Filter by allowed profiles if specified
+        if allowed_profiles:
+            attacks = [
+                a for a in attacks
+                if a.get("profile_name") in allowed_profiles
+            ]
+        
         return attacks
 
     def _normalize_llm_attacks(
@@ -304,13 +320,102 @@ class AttackPlanner:
         return normalized
 
     def _plan_rule_based(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        """Plan attacks using rule-based matching of profiles to endpoint fields.
+        
+        This method handles:
+        - Standard field-based attacks (SQLi, XSS, etc.)
+        - GraphQL endpoints (special handling)
+        - File upload endpoints (multipart/form-data)
+        """
         method = endpoint.get("method", "GET")
         path = endpoint.get("path", "")
         fields = self._extract_endpoint_fields(endpoint)
 
         attacks: list[dict[str, Any]] = []
+        
         for profile in self.attack_profiles:
+            # Special handling for GraphQL Security profile
+            if profile.name == "GraphQL Security":
+                if path.endswith("/graphql") or "graphql" in path.lower():
+                    first_payload = profile.payloads[0] if profile.payloads else "{ __typename }"
+                    payload = self._build_payload("query", "graphql", first_payload)
+                    indicators = profile.success_indicators or {}
+                    attacks.append(
+                        {
+                            "type": profile.category,
+                            "name": profile.name,
+                            "profile_name": profile.name,
+                            "description": profile.description,
+                            "endpoint": path,
+                            "method": method,
+                            "field": "query",
+                            "location": "graphql",
+                            "payloads": profile.payloads or [first_payload],
+                            "payload": payload,
+                            "target_param": "query",
+                            "expected_status": self._expected_status(indicators),
+                            "priority": self._severity_to_priority(profile.severity),
+                            "severity": profile.severity,
+                            "success_indicators": indicators,
+                            "expected_indicators": indicators,
+                            "remediation": profile.remediation,
+                            "references": profile.references,
+                        }
+                    )
+                continue
+
+            # Special handling for File Upload Bypass profile
+            if profile.name == "File Upload Bypass":
+                request_body = endpoint.get("requestBody") or {}
+                content = request_body.get("content", {})
+                
+                if "multipart/form-data" in content or "application/octet-stream" in content:
+                    schema = content.get("multipart/form-data", {}).get("schema", {}) or \
+                             content.get("application/octet-stream", {}).get("schema", {})
+                    
+                    properties = schema.get("properties", {})
+                    for prop_name, prop_details in properties.items():
+                        p_type = prop_details.get("type")
+                        p_format = prop_details.get("format")
+                        
+                        # Check if this looks like a file upload field
+                        is_file = (p_type == "string" and p_format in ("binary", "base64")) or \
+                                  (prop_name.lower() in [tf.lower() for tf in profile.target_fields])
+
+                        if is_file:
+                            first_payload = profile.payloads[0] if profile.payloads else "malicious.php"
+                            payload = self._build_payload(prop_name, "file", first_payload)
+                            indicators = profile.success_indicators or {}
+                            attacks.append(
+                                {
+                                    "type": profile.category,
+                                    "name": profile.name,
+                                    "profile_name": profile.name,
+                                    "description": profile.description,
+                                    "endpoint": path,
+                                    "method": method,
+                                    "field": prop_name,
+                                    "location": "file",
+                                    "payloads": profile.payloads or [first_payload],
+                                    "payload": payload,
+                                    "target_param": prop_name,
+                                    "expected_status": self._expected_status(indicators),
+                                    "priority": self._severity_to_priority(profile.severity),
+                                    "severity": profile.severity,
+                                    "success_indicators": indicators,
+                                    "expected_indicators": indicators,
+                                    "remediation": profile.remediation,
+                                    "references": profile.references,
+                                }
+                            )
+                continue
+
+            # Standard field-based attack planning
             for field_name, location in fields:
+                # Skip body fields for GET requests
+                if location == "body" and method.upper() == "GET":
+                    continue
+                    
                 if any(
                     self._field_matches_target(field_name, target)
                     for target in profile.target_fields
@@ -371,6 +476,7 @@ class AttackPlanner:
                 }
             )
 
+        # Deduplicate attacks
         unique_attacks: list[dict[str, Any]] = []
         seen: set[tuple[str, str, str]] = set()
         for attack in attacks:
@@ -388,8 +494,14 @@ class AttackPlanner:
         return unique_attacks
 
     def _extract_endpoint_fields(self, endpoint: dict[str, Any]) -> list[tuple[str, str]]:
+        """Extract all fields from an endpoint definition.
+        
+        This method ONLY extracts fields - no attack planning logic.
+        Returns list of (field_name, location) tuples.
+        """
         fields: list[tuple[str, str]] = []
 
+        # Extract parameters
         for param in endpoint.get("parameters", []):
             if not isinstance(param, dict):
                 continue
@@ -399,24 +511,30 @@ class AttackPlanner:
             location = str(param.get("in", "query")).lower()
             fields.append((str(name), location))
 
+        # Extract request body properties
         request_body = endpoint.get("requestBody") or {}
         content = request_body.get("content", {})
-        for content_type, media_type in content.items():
+        
+        for media_type in content.values():
             schema = media_type.get("schema", {})
             properties = schema.get("properties", {})
+            
             if isinstance(properties, dict):
                 for field_name in properties.keys():
                     fields.append((str(field_name), "body"))
 
+        # Fallback if no fields found
         if not fields:
             fields.append(("q", "query"))
 
+        # Deduplicate
         deduped: list[tuple[str, str]] = []
-        seen_fields: set[tuple[str, str]] = set()
+        seen: set[tuple[str, str]] = set()
+        
         for field_name, location in fields:
             key = (field_name, location)
-            if key not in seen_fields:
-                seen_fields.add(key)
+            if key not in seen:
+                seen.add(key)
                 deduped.append(key)
 
         return deduped
@@ -532,3 +650,201 @@ class AttackPlanner:
                 f"Test '{field_name}' of type '{field_type}' "
                 "with boundary values and injection strings."
             )
+
+
+# Default profile list for fallback when toys directory is not accessible
+default_profiles = [
+    "SQL Injection - Basic",
+    "XSS - Reflected",
+    "IDOR - Basic",
+    "BOLA - Broken Object Level Authorization",
+    "Command Injection",
+    "Path Traversal",
+    "XXE Injection",
+    "SSRF"
+]
+
+# Natural Language Attack Targeting Prompt
+NATURAL_LANGUAGE_PLANNING_PROMPT = """You are a security expert tasked with identifying which API endpoints are most relevant to test for a specific security goal.
+
+User's Goal: {goal}
+
+Available Endpoints:
+{endpoints}
+
+Available Attack Profiles:
+{profiles}
+
+Analyze the user's goal and identify:
+1. Which endpoints are most relevant to this goal (ranked by relevance)
+2. Which attack profiles should be applied to these endpoints
+3. Custom payload focus areas or testing priorities specific to this goal
+
+You must respond ONLY with valid JSON (no markdown, no explanations outside JSON):
+{
+    "endpoints": [
+        {
+            "method": "POST",
+            "path": "/api/checkout",
+            "relevance_score": 0.95,
+            "reason": "Handles payment processing, critical for price manipulation testing"
+        }
+    ],
+    "profiles": ["IDOR - Basic", "Mass Assignment / Parameter Pollution", "BOLA - Broken Object Level Authorization"],
+    "focus": "Test for price/quantity manipulation in cart and checkout flows. Pay special attention to total calculation bypass and discount abuse."
+}
+
+Remember: respond only with valid JSON matching the schema above. Do not include any explanatory text.
+"""
+
+
+class NaturalLanguagePlanner:
+    """Plans attacks based on natural language goals."""
+
+    def __init__(self, endpoints: list[dict[str, Any]], config: dict[str, Any]):
+        """Initialize the NL planner.
+
+        Args:
+            endpoints: List of all available API endpoints
+            config: Application configuration with LLM settings
+        """
+        self.endpoints = endpoints
+        self.config = config
+        self.llm = self._init_llm()
+
+    def _init_llm(self):
+        """Initialize the LLM based on config."""
+        agent_config = self.config.get("agent", {})
+        provider = agent_config.get("llm_provider", "anthropic").lower()
+        temperature = agent_config.get("temperature", 0.7)
+        
+        # Provider-specific default models
+        default_models = {
+            "openai": "gpt-4o",
+            "anthropic": "claude-3-5-sonnet-20241022",
+            "ollama": "llama3",
+        }
+        model = agent_config.get("model", default_models.get(provider, "claude-3-5-sonnet-20241022"))
+
+        if provider == "anthropic":
+            return ChatAnthropic(model=model, temperature=temperature)
+        elif provider == "openai":
+            return ChatOpenAI(model=model, temperature=temperature)
+        elif provider == "ollama":
+            return ChatOllama(model=model, temperature=temperature)
+        else:
+            logger.warning("Unknown provider %s, defaulting to Anthropic", provider)
+            return ChatAnthropic(model=model, temperature=temperature)
+
+    def plan(self, goal: str) -> dict[str, Any]:
+        """Plan attacks based on natural language goal.
+
+        Args:
+            goal: User's natural language security goal
+
+        Returns:
+            Dictionary with:
+                - endpoints: List of relevant endpoints with relevance scores
+                - profiles: List of attack profile names to apply
+                - focus: Custom payload focus description
+                - reasoning: LLM's reasoning (for logging)
+        """
+        # Load available attack profiles
+        attack_profiles = self._load_available_profiles()
+
+        # Format endpoints for LLM
+        endpoints_str = json.dumps(
+            [
+                {
+                    "method": ep.get("method", "GET"),
+                    "path": ep.get("path", ""),
+                    "params": [p.get("name", "") for p in ep.get("parameters", []) if isinstance(p, dict)],
+                    "body": list(((ep.get("requestBody") or {}).get("content", {}).get("application/json", {}).get("schema", {}).get("properties", {})).keys()),
+                }
+                for ep in self.endpoints
+            ],
+            indent=2
+        )
+
+        profiles_str = json.dumps(attack_profiles, indent=2)
+
+        # Create prompt
+        prompt = ChatPromptTemplate.from_template(NATURAL_LANGUAGE_PLANNING_PROMPT)
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        try:
+            logger.info(f"[GOAL] Planning attacks for goal: {goal}")
+            result = chain.invoke({
+                "goal": goal,
+                "endpoints": endpoints_str,
+                "profiles": profiles_str
+            })
+
+            # Log the reasoning
+            if result.get("endpoints"):
+                logger.info(f"[GOAL] LLM selected {len(result['endpoints'])} relevant endpoints")
+                for ep in result.get("endpoints", [])[:3]:  # Log top 3
+                    score = ep.get('relevance_score', 0)
+                    # Convert to float safely
+                    try:
+                        score_val = float(score)
+                    except (TypeError, ValueError):
+                        score_val = 0.0
+                    logger.info(
+                        f"[GOAL]   - {ep.get('method')} {ep.get('path')} "
+                        f"(score: {score_val:.2f})"
+                    )
+
+            if result.get("focus"):
+                logger.info(f"[GOAL] Focus area: {result['focus']}")
+
+            # Add reasoning for return
+            result["reasoning"] = f"LLM analysis for goal: '{goal}'"
+
+            return result
+
+        except Exception:
+            logger.exception("[GOAL] Natural language planning failed")
+            # Fallback: return all endpoints with no filtering
+            return {
+                "endpoints": [
+                    {
+                        "method": ep.get("method", "GET"),
+                        "path": ep.get("path", ""),
+                        "relevance_score": 0.5,
+                        "reason": "Fallback: LLM planning failed"
+                    }
+                    for ep in self.endpoints
+                ],
+                "profiles": ["SQL Injection - Basic", "XSS - Reflected", "IDOR - Basic"],
+                "focus": "Standard security testing (LLM planning unavailable)",
+                "reasoning": "Fallback: LLM planning failed"
+            }
+
+    def _load_available_profiles(self) -> list[str]:
+        """Load list of available attack profile names."""
+        try:
+            import os as _os
+            module_dir = _os.path.dirname(_os.path.abspath(__file__))
+            package_root = _os.path.dirname(_os.path.dirname(module_dir))
+            toys_dir = _os.path.join(package_root, "toys")
+            profile_files = glob.glob(_os.path.join(toys_dir, "*.yaml"))
+            if not profile_files:
+                return default_profiles
+            
+            # Load YAML name fields to match attack dict profile_name values
+            profile_names = []
+            for profile_file in profile_files:
+                try:
+                    with open(profile_file, 'r') as f:
+                        profile_data = yaml.safe_load(f)
+                        name = profile_data.get("name", _os.path.basename(profile_file).replace(".yaml", ""))
+                        profile_names.append(name)
+                except Exception:
+                    # Fallback to file-stem if YAML read fails
+                    profile_names.append(_os.path.basename(profile_file).replace(".yaml", ""))
+            
+            return profile_names if profile_names else default_profiles
+        except Exception:
+            return default_profiles
