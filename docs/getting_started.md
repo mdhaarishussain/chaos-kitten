@@ -102,26 +102,40 @@ ANTHROPIC_API_KEY=your_key_here
 chaos-kitten scan
 ```
 
-### 5. Use Natural Language Targeting (Optional)
+### 5. Chaos Mode (Negative Testing)
 
-The `--goal` flag lets you describe what you want to test in plain English. Chaos Kitten's LLM will automatically select relevant endpoints and attack profiles based on your goal.
+Chaos Mode goes beyond known attack signatures by generating structurally invalid inputs to discover unknown crashes, 500 errors, and hidden behaviors.
 
-**Example 1: Payment Security**
 ```bash
-chaos-kitten scan --goal "find all endpoints that handle money or payments and check if prices can be manipulated"
+# Enable chaos mode alongside normal scanning
+chaos-kitten scan --chaos --target http://localhost:5000
+
+# Adjust chaos intensity (1 = gentle, 5 = maximum carnage)
+chaos-kitten scan --chaos --chaos-level 5 --target http://localhost:5000
 ```
 
-**Example 2: Access Control**
-```bash
-chaos-kitten scan --goal "I want to check if admin endpoints are accessible to regular users"
+Chaos Mode tests for:
+- **Wrong types:** Sending strings where integers are expected, arrays instead of objects, etc.
+- **Boundary extremes:** Int32 min/max, float overflow (1e308), very long strings (100K chars)
+- **Null and missing:** Null bytes, null values, missing required fields
+- **Unicode edge cases:** Zero-width chars, direction overrides, emoji floods, unpaired surrogates
+- **Header mutations:** Missing Content-Type, XML Content-Type (for XXE), mismatched Content-Length
+
+Example findings unique to Chaos Mode:
+```
+[CHAOS] server_error on POST /api/users — Null value
+[CHAOS] response_time_outlier on POST /api/products — Very long string (100K)
+[CHAOS] information_leak on POST /api/orders — Float overflow boundary
 ```
 
-**Example 3: Authentication Testing**
-```bash
-chaos-kitten scan --goal "test the authentication system for account takeover risks"
-```
-
-Without `--goal`, Chaos Kitten runs a full scan testing all endpoints. With `--goal`, the LLM prioritizes endpoints relevant to your security concern.
+Chaos levels:
+| Level | Mode | Description |
+|-------|------|-------------|
+| 1 | Gentle | Basic type mismatches |
+| 2 | Moderate | Boundary values + nulls |
+| 3 | Aggressive | Unicode + control chars + large inputs |
+| 4 | Destructive | Overflow + injection + nested attacks |
+| 5 | Maximum Carnage | Everything at once |
 
 ## Understanding Results
 

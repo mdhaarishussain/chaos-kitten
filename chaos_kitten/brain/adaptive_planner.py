@@ -4,9 +4,14 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from langchain_core.language_models import BaseChatModel
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
+try:
+    from langchain_core.language_models import BaseChatModel
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+    HAS_LANGCHAIN = True
+except ImportError:
+    HAS_LANGCHAIN = False
+    BaseChatModel = Any
 
 logger = logging.getLogger(__name__)
 

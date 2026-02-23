@@ -15,9 +15,14 @@ class Config:
         Args:
             config_path: Path to configuration file
         """
-        self.config_path = Path(config_path)
+        self._config_path = Path(config_path)
         self._config: Dict[str, Any] = {}
-    
+
+    @property
+    def config_path(self) -> Path:
+        """Get path to configuration file."""
+        return self._config_path
+
     def load(self) -> Dict[str, Any]:
         """Load and validate configuration.
 
@@ -124,6 +129,6 @@ class Config:
         return self._config.get("safety", {})
     
     @property
-    def adaptive(self) -> Dict[str, Any]:
-        """Get adaptive configuration."""
-        return self._config.get("adaptive", {})
+    def checkpoint_path(self) -> Path:
+        """Get path to the checkpoint file."""
+        return Path(self._config.get("checkpoint_path", ".chaos-checkpoint.json"))

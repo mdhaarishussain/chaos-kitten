@@ -280,3 +280,171 @@ async def test_unexpected_error(base_url):
             
             assert result["status_code"] == 0
             assert "Unexpected error" in result["error"]
+
+
+# --- Request/Response Logging Tests ---
+
+@pytest.mark.asyncio
+async def test_logging_enabled_logs_request_and_response(base_url, caplog):
+    """Test that enabling logging captures request and response details."""
+    import logging
+    caplog.set_level(logging.INFO)
+    
+    async with Executor(base_url=base_url, enable_logging=True) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/users").respond(200, json={"users": []})
+            
+            await executor.execute_attack("GET", "/users")
+            
+            # Check that request and response were logged
+            log_messages = [record.message for record in caplog.records]
+            assert any("REQUEST" in msg and "GET" in msg for msg in log_messages)
+            assert any("RESPONSE" in msg and "Status: 200" in msg for msg in log_messages)
+
+
+@pytest.mark.asyncio
+async def test_logging_redacts_authorization_header(base_url, caplog):
+    """Test that sensitive Authorization header is redacted in logs."""
+    import logging
+    caplog.set_level(logging.DEBUG)
+    
+    token = "secret_token_12345"
+    async with Executor(
+        base_url=base_url,
+        auth_type="bearer",
+        auth_token=token,
+        enable_logging=True
+    ) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/protected").respond(200, json={"data": "sensitive"})
+            
+            await executor.execute_attack("GET", "/protected")
+            
+            # Check that token is NOT in logs
+            log_text = " ".join([record.message for record in caplog.records])
+            assert token not in log_text
+            assert "[REDACTED]" in log_text
+
+
+@pytest.mark.asyncio
+async def test_logging_redacts_api_key_in_query_params(base_url, caplog):
+    """Test that API keys in query parameters are redacted."""
+    import logging
+    caplog.set_level(logging.INFO)
+    
+    async with Executor(base_url=base_url, enable_logging=True) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/data").respond(200, json={"result": "ok"})
+            
+            await executor.execute_attack(
+                "GET",
+                "/data?api_key=secret123&other=value"
+            )
+            
+            # Check that API key is redacted but other params remain
+            log_text = " ".join([record.message for record in caplog.records])
+            assert "secret123" not in log_text
+            assert "api_key=[REDACTED]" in log_text
+            assert "other=value" in log_text
+
+
+@pytest.mark.asyncio
+async def test_logging_truncates_large_request_body(base_url, caplog):
+    """Test that large request bodies are truncated in logs."""
+    import logging
+    caplog.set_level(logging.DEBUG)
+    
+    # Create a large payload (over 500 chars)
+    large_payload = {"data": "x" * 600}
+    
+    async with Executor(base_url=base_url, enable_logging=True) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.post("/upload").respond(201, json={"id": 1})
+            
+            await executor.execute_attack("POST", "/upload", payload=large_payload)
+            
+            # Check that body was truncated
+            log_text = " ".join([record.message for record in caplog.records])
+            assert "[truncated]" in log_text
+
+
+@pytest.mark.asyncio
+async def test_logging_full_body_for_errors(base_url, caplog):
+    """Test that full response body is logged for errors."""
+    import logging
+    caplog.set_level(logging.WARNING)
+    
+    error_body = "Detailed error message with stack trace"
+    
+    async with Executor(base_url=base_url, enable_logging=True) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/fail").respond(500, text=error_body)
+            
+            await executor.execute_attack("GET", "/fail")
+            
+            # Check that error details are logged
+            log_messages = [record.message for record in caplog.records]
+            # HTTP error responses (4xx/5xx) should include full body at WARNING level
+            assert any(error_body in msg for msg in log_messages)
+
+
+@pytest.mark.asyncio
+async def test_logging_to_file(base_url, tmp_path):
+    """Test that logs are written to file when log_file is specified."""
+    import logging
+    
+    log_file = tmp_path / "executor.log"
+    
+    async with Executor(
+        base_url=base_url,
+        enable_logging=True,
+        log_file=str(log_file)
+    ) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/test").respond(200, json={"status": "ok"})
+            
+            await executor.execute_attack("GET", "/test")
+    
+    # Check that log file was created and contains logs
+    assert log_file.exists()
+    log_content = log_file.read_text()
+    assert "REQUEST" in log_content
+    assert "GET" in log_content
+    assert "RESPONSE" in log_content
+    assert "Status: 200" in log_content
+
+
+@pytest.mark.asyncio
+async def test_logging_disabled_by_default(base_url, caplog):
+    """Test that logging is disabled by default."""
+    import logging
+    caplog.set_level(logging.DEBUG)
+    
+    async with Executor(base_url=base_url) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/users").respond(200, json={"users": []})
+            
+            await executor.execute_attack("GET", "/users")
+            
+            # Check that no request/response logs were created
+            log_messages = [record.message for record in caplog.records]
+            assert not any("REQUEST" in msg and "GET" in msg for msg in log_messages)
+            assert not any("RESPONSE" in msg and "Status: 200" in msg for msg in log_messages)
+
+
+@pytest.mark.asyncio
+async def test_logging_includes_response_time(base_url, caplog):
+    """Test that response logging includes elapsed time in milliseconds."""
+    import logging
+    caplog.set_level(logging.INFO)
+    
+    async with Executor(base_url=base_url, enable_logging=True) as executor:
+        async with respx.mock(base_url=base_url) as mock:
+            mock.get("/users").respond(200, json={"users": []})
+            
+            await executor.execute_attack("GET", "/users")
+            
+            # Check that response time is logged
+            log_messages = [record.message for record in caplog.records]
+            assert any("Time:" in msg and "ms" in msg for msg in log_messages)
+
