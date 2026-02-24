@@ -316,13 +316,6 @@ class AttackPlanner:
 
         attacks: list[dict[str, Any]] = []
         
-        # Check if this endpoint is a file upload endpoint
-        if self._is_file_upload_endpoint(endpoint):
-            attacks.extend(self._plan_file_upload_attacks(endpoint))
-        
-        # Check if this endpoint is a deserialization endpoint
-        if self._is_deserialization_endpoint(endpoint):
-            attacks.extend(self._plan_deserialization_attacks(endpoint))
         
         for profile in self.attack_profiles:
             for field_name, location in fields:

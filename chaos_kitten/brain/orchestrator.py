@@ -158,6 +158,76 @@ async def execute_and_analyze(state: AgentState, executor: Executor) -> Dict[str
     }
 
 
+async def test_business_logic(state: AgentState, executor: Executor) -> Dict[str, Any]:
+    """Test endpoints for business logic vulnerabilities.
+    
+    Args:
+        state: Current agent state
+        executor: HTTP executor for making requests
+        
+    Returns:
+        Updated state with business logic findings
+    """
+    idx = state["current_endpoint"]
+    if idx >= len(state["endpoints"]):
+        return {
+            "findings": state["findings"],
+            "business_logic_findings": state["business_logic_findings"],
+            "current_endpoint": idx,
+        }
+
+    endpoint = state["endpoints"][idx]
+    attacker = BusinessLogicAttacker(executor=executor)
+    
+    new_business_logic_findings = []
+    
+    # Load business logic attack profiles from toys
+    import os
+    from chaos_kitten.utils.config import load_yaml
+    
+    toys_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "toys")
+    bl_profiles = []
+    
+    # Try to load business logic profiles
+    bl_files = ["race_condition.yaml", "workflow_bypass.yaml", "authorization_bypass.yaml", "price_manipulation.yaml"]
+    for bl_file in bl_files:
+        profile_path = os.path.join(toys_dir, bl_file)
+        if os.path.exists(profile_path):
+            try:
+                profile = load_yaml(profile_path)
+                bl_profiles.append(profile)
+            except Exception as e:
+                logger.debug(f"Failed to load {bl_file}: {e}")
+    
+    # Test each profile against the endpoint
+    for profile in bl_profiles:
+        try:
+            vulnerabilities = await attacker.test_endpoint(endpoint, profile)
+            
+            for vuln in vulnerabilities:
+                vuln_dict = {
+                    "type": vuln.attack_type.value,
+                    "title": vuln.vulnerability_name,
+                    "description": vuln.description,
+                    "severity": vuln.severity,
+                    "endpoint": vuln.endpoint,
+                    "method": vuln.method,
+                    "evidence": vuln.evidence,
+                    "payload": profile.get("payloads", []),
+                    "proof_of_concept": vuln.proof_of_concept,
+                    "remediation": vuln.remediation,
+                }
+                new_business_logic_findings.append(vuln_dict)
+        except Exception as e:
+            logger.debug(f"Failed to test profile {profile.get('name', 'unknown')}: {e}")
+    
+    return {
+        "findings": state["findings"],
+        "business_logic_findings": state["business_logic_findings"] + new_business_logic_findings,
+        "current_endpoint": idx + 1,
+    }
+
+
 def should_continue(state: AgentState) -> Literal["test_bl", "end"]:
     """Determine next action: test business logic or end."""
     if state["current_endpoint"] < len(state["endpoints"]):

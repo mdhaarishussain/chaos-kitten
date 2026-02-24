@@ -68,8 +68,8 @@ payloads:
   # Attempt to access other users' resources
   - "{{ user_id }}"
   - "{{ other_user_id }}"
-  - "${user_id}"
-  - "${other_user_id}"
+  - "{{ user_id_2 }}"
+  - "{{ other_user_id_2 }}"
 
 success_indicators:
   # Successfully accessed unauthorized resources - narrowed to reduce false positives
