@@ -21,7 +21,10 @@ pip install chaos-kitten
 ```bash
 git clone https://github.com/mdhaarishussain/chaos-kitten.git
 cd chaos-kitten
-pip install -e .
+pip install -e .        # Standard install (no browser)
+# Optional: browser exploit validation
+pip install -e .[browser]
+playwright install chromium
 ```
 
 ### Option 3: Docker (Recommended for Isolation)
@@ -99,6 +102,41 @@ ANTHROPIC_API_KEY=your_key_here
 chaos-kitten scan
 ```
 
+### 5. Chaos Mode (Negative Testing)
+
+Chaos Mode goes beyond known attack signatures by generating structurally invalid inputs to discover unknown crashes, 500 errors, and hidden behaviors.
+
+```bash
+# Enable chaos mode alongside normal scanning
+chaos-kitten scan --chaos --target http://localhost:5000
+
+# Adjust chaos intensity (1 = gentle, 5 = maximum carnage)
+chaos-kitten scan --chaos --chaos-level 5 --target http://localhost:5000
+```
+
+Chaos Mode tests for:
+- **Wrong types:** Sending strings where integers are expected, arrays instead of objects, etc.
+- **Boundary extremes:** Int32 min/max, float overflow (1e308), very long strings (100K chars)
+- **Null and missing:** Null bytes, null values, missing required fields
+- **Unicode edge cases:** Zero-width chars, direction overrides, emoji floods, unpaired surrogates
+- **Header mutations:** Missing Content-Type, XML Content-Type (for XXE), mismatched Content-Length
+
+Example findings unique to Chaos Mode:
+```
+[CHAOS] server_error on POST /api/users — Null value
+[CHAOS] response_time_outlier on POST /api/products — Very long string (100K)
+[CHAOS] information_leak on POST /api/orders — Float overflow boundary
+```
+
+Chaos levels:
+| Level | Mode | Description |
+|-------|------|-------------|
+| 1 | Gentle | Basic type mismatches |
+| 2 | Moderate | Boundary values + nulls |
+| 3 | Aggressive | Unicode + control chars + large inputs |
+| 4 | Destructive | Overflow + injection + nested attacks |
+| 5 | Maximum Carnage | Everything at once |
+
 ## Understanding Results
 
 ### Severity Levels
@@ -132,3 +170,38 @@ chaos-kitten scan
 
 - Open an [Issue](https://github.com/mdhaarishussain/chaos-kitten/issues)
 - Join our [Discussions](https://github.com/mdhaarishussain/chaos-kitten/discussions)
+
+## CI/CD Integration
+
+Integrate Chaos Kitten into your CI/CD pipeline to catch vulnerabilities early.
+
+### GitHub Actions
+
+We provide a ready-to-use GitHub Actions workflow.
+
+1. Create `.github/workflows/security-scan.yml`
+2. Copy the content from `examples/github-actions-workflow.yml`
+3. Configure secrets in your repository settings
+
+### GitLab CI/CD
+
+Add this job to your `.gitlab-ci.yml`:
+
+```yaml
+security_scan:
+  image: python:3.12
+  script:
+    - pip install chaos-kitten
+    - chaos-kitten scan --target $STAGING_URL --format junit --output reports --fail-on high --silent
+  artifacts:
+    reports:
+      junit: reports/*.xml
+```
+
+### CLI Flags for CI
+
+- `--format sarif`: Generates SARIF output for GitHub Advanced Security
+- `--format junit`: Generates XML output for CI test parsers
+- `--fail-on [medium|high|critical]`: Sets the exit code to 1 if vulnerabilities of this level or higher are found
+- `--silent`: Suppresses non-error console output
+

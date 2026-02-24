@@ -8,7 +8,7 @@ import pytest
 import httpx
 import respx
 from chaos_kitten.paws.executor import Executor
-from chaos_kitten.paws.browser import BrowserAutomation
+from chaos_kitten.paws.browser import BrowserExecutor
 
 
 class TestExecutor:
@@ -298,23 +298,23 @@ class TestExecutor:
         assert executor._client is not None
 
 
-class TestBrowserAutomation:
+class TestBrowserExecutor:
     """Tests for the browser automation module."""
     
     def test_initialization(self):
         """Test default initialization."""
-        browser = BrowserAutomation(headless=True)
+        browser = BrowserExecutor(headless=True)
         assert browser.headless is True
         assert browser._browser is None
         assert browser._context is None
         assert browser._playwright is None
         
-        browser_visible = BrowserAutomation(headless=False)
+        browser_visible = BrowserExecutor(headless=False)
         assert browser_visible.headless is False
 
     def test_initialization_with_timeout(self):
         """Test initialization with custom timeout."""
-        browser = BrowserAutomation(headless=True, timeout=5000)
+        browser = BrowserExecutor(headless=True, timeout=5000)
         assert browser.timeout == 5000
 
     @pytest.mark.asyncio
@@ -323,7 +323,7 @@ class TestBrowserAutomation:
 
         Note: <script> tags injected via innerHTML do NOT execute per HTML5 spec.
         We use document.write() in the test page so that the <script> payload
-        actually runs and fires the dialog handler in BrowserAutomation.test_xss.
+        actually runs and fires the dialog handler in BrowserExecutor.test_xss.
         """
         pytest.importorskip("playwright")
 
@@ -356,7 +356,7 @@ class TestBrowserAutomation:
         screenshot_path = None
         with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
             try:
-                async with BrowserAutomation(headless=True) as browser:
+                async with BrowserExecutor(headless=True) as browser:
                     result = await browser.test_xss(
                         url=f"file://{test_file}",
                         payload="<script>alert('XSS')</script>",
@@ -410,7 +410,7 @@ class TestBrowserAutomation:
 
         with tempfile.TemporaryDirectory() as tmp_screenshot_dir:
             try:
-                async with BrowserAutomation(headless=True) as browser:
+                async with BrowserExecutor(headless=True) as browser:
                     result = await browser.test_xss(
                         url=f"file://{test_file}",
                         payload="<img src=x onerror=alert('XSS')>",
@@ -454,7 +454,7 @@ class TestBrowserAutomation:
             test_file = f.name
 
         try:
-            async with BrowserAutomation(headless=True) as browser:
+            async with BrowserExecutor(headless=True) as browser:
                 result = await browser.test_xss(
                     url=f"file://{test_file}",
                     payload="<script>alert('XSS')</script>",
@@ -472,7 +472,7 @@ class TestBrowserAutomation:
         """Test that browser resources are properly cleaned up."""
         pytest.importorskip("playwright")
 
-        browser = BrowserAutomation(headless=True)
+        browser = BrowserExecutor(headless=True)
 
         async with browser:
             assert browser._browser is not None
@@ -488,7 +488,7 @@ class TestBrowserAutomation:
         """Test error handling with invalid URL."""
         pytest.importorskip("playwright")
         
-        async with BrowserAutomation(headless=True) as browser:
+        async with BrowserExecutor(headless=True) as browser:
             result = await browser.test_xss(
                 url="http://invalid-url-that-does-not-exist-12345.com",
                 payload="<script>alert('XSS')</script>",
@@ -513,7 +513,7 @@ class TestBrowserAutomation:
             test_file = f.name
 
         try:
-            async with BrowserAutomation(headless=True) as browser:
+            async with BrowserExecutor(headless=True) as browser:
                 result = await browser.test_xss(
                     url=f"file://{test_file}",
                     payload="<script>alert('XSS')</script>",

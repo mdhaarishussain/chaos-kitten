@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """OpenAPI/Swagger specification parser.
 
 This module provides the `OpenAPIParser` class, which parses OpenAPI 3.x and 
@@ -28,7 +30,6 @@ Examples:
     dict_keys(['BearerAuth', 'ApiKey'])
 """
 
-from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -317,9 +318,24 @@ class OpenAPIParser:
                 variables = server_obj.get('variables', {})
                 
                 # Perform variable substitution
-                # Uses default value if available
+                # Uses default value if available, falls back to first enum value
                 for var_name, var_info in variables.items():
-                    default_val = var_info.get('default', '')
+                    if 'default' in var_info:
+                        default_val = var_info['default']
+                    elif 'enum' in var_info and var_info['enum']:
+                        default_val = var_info['enum'][0]
+                        logger.warning(
+                            "Server variable '%s' has no default; "
+                            "falling back to first enum value: %s",
+                            var_name, default_val,
+                        )
+                    else:
+                        default_val = ''
+                        logger.warning(
+                            "Server variable '%s' has no default or enum values; "
+                            "substituting empty string",
+                            var_name,
+                        )
                     url = url.replace(f"{{{var_name}}}", str(default_val))
                 
                 servers.append(url)
