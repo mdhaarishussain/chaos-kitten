@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
+
 import asyncio
 import json
 import logging
@@ -24,6 +29,10 @@ class Executor:
         auth_token: str = "",
         rate_limit: float = 0,
         timeout: int = 30,
+        # New MFA fields
+        totp_secret: Optional[str] = None,
+        totp_endpoint: Optional[str] = None,
+        totp_field: str = "code",
         enable_logging: bool = False,
         log_file: Optional[str] = None,
     ) -> None:
@@ -35,35 +44,25 @@ class Executor:
             auth_token: Authentication token/credentials
             rate_limit: Maximum requests per second (0 = no limit)
             timeout: Request timeout in seconds
-<<<<<<< 119
-=======
             enable_logging: Enable request/response logging
             log_file: Optional file path to save logs
         
         Raises:
             ValueError: If auth_type is not supported.
->>>>>>> main
         """
         self.base_url = base_url
         self.auth_type = auth_type
         self.auth_token = auth_token
         self.rate_limit = rate_limit
         self.timeout = timeout
-<<<<<<< 119
-
-        self._client: Optional[httpx.AsyncClient] = None
-        self._rate_limiter: Optional[asyncio.Semaphore] = None
-        self._last_request_time: float = 0
-
-    async def __aenter__(self) -> "Executor":
-        """Async context manager entry."""
-        await self._ensure_client()
-=======
         self.enable_logging = enable_logging
         self.log_file = log_file
         self._client: Optional[httpx.AsyncClient] = None
         self._rate_limiter: Optional[asyncio.Semaphore] = None
         self._last_request_time: float = 0.0
+        self.totp_secret = totp_secret
+        self.totp_endpoint = totp_endpoint
+        self.totp_field = totp_field
         
         # Set up logging
         self._setup_logging()
@@ -75,8 +74,11 @@ class Executor:
             timeout=self.timeout,
             headers=self._build_headers(),
         )
+        
+        await self._perform_mfa_auth()
+        
+        # Initialize rate limiter semaphore
         self._rate_limiter = asyncio.Semaphore(self.rate_limit)
->>>>>>> main
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -99,14 +101,6 @@ class Executor:
         """Close the HTTP client."""
         if self._client is not None:
             await self._client.aclose()
-<<<<<<< 119
-            self._client = None
-
-    def _build_headers(self) -> dict[str, str]:
-        """Build authentication headers."""
-        headers = {}
-        if self.auth_type == "bearer":
-=======
         
         # Close file handler to prevent resource leak
         if self.enable_logging and self.log_file:
@@ -119,7 +113,6 @@ class Executor:
         headers = {"User-Agent": "ChaosKitten/0.1.0"}
         
         if self.auth_type in ("bearer", "oauth") and self.auth_token:
->>>>>>> main
             headers["Authorization"] = f"Bearer {self.auth_token}"
         elif self.auth_type == "basic":
             headers["Authorization"] = f"Basic {self.auth_token}"
@@ -206,9 +199,6 @@ class Executor:
         request_headers = request_kwargs.pop("headers", {})
 
         start_time = time.perf_counter()
-<<<<<<< 119
-
-=======
         
         # Log request (timestamp created inside if logging enabled)
         self._log_request(
@@ -218,7 +208,6 @@ class Executor:
             payload=payload or graphql_query,
         )
         
->>>>>>> main
         try:
             # Execute request based on method
             if method.upper() == "GET":
@@ -254,20 +243,8 @@ class Executor:
                 )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-<<<<<<< 119
-
-            # Try to parse JSON response
-            body = response.text
-            try:
-                body = response.json()
-            except (json.JSONDecodeError, ValueError):
-                pass
-
-            return {
-=======
             
             result = {
->>>>>>> main
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
                 "body": body,
@@ -275,9 +252,6 @@ class Executor:
                 "error": None,
                 "url": str(response.url),
             }
-<<<<<<< 119
-
-=======
             
             # Log response
             self._log_response(
@@ -290,7 +264,6 @@ class Executor:
             
             return result
             
->>>>>>> main
         except httpx.TimeoutException as e:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             error_msg = f"Request timeout: {str(e)}"
@@ -303,44 +276,6 @@ class Executor:
                 "elapsed_ms": elapsed_ms,
                 "error": error_msg,
             }
-<<<<<<< 119
-
-        except httpx.ConnectError as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            error_msg = f"Connection error: {str(e)}"
-            logger.warning(f"Connection error executing {method} {path}: {e}")
-            return {
-                "status_code": 0,
-                "headers": {},
-                "body": "",
-                "elapsed_ms": elapsed_ms,
-                "error": error_msg,
-            }
-
-        except httpx.HTTPError as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            error_msg = f"HTTP error: {str(e)}"
-            logger.warning(f"HTTP error executing {method} {path}: {e}")
-            return {
-                "status_code": 0,
-                "headers": {},
-                "body": "",
-                "elapsed_ms": elapsed_ms,
-                "error": error_msg,
-            }
-
-        except Exception as e:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            error_msg = f"Unexpected error: {str(e)}"
-            logger.warning(f"Unexpected error executing {method} {path}: {e}")
-            return {
-                "status_code": 0,
-                "headers": {},
-                "body": "",
-                "elapsed_ms": elapsed_ms,
-                "error": error_msg,
-            }
-=======
             
             # Log error response
             self._log_response(
@@ -612,4 +547,48 @@ class Executor:
             
             # Update last request time
             self._last_request_time = time.perf_counter()
->>>>>>> main
+=======
+
+    def _generate_totp(self) -> Optional[str]:
+        """Generate a 6-digit TOTP code if secret is available.
+        
+        Returns:
+            A 6-digit string code or None if pyotp is not installed or secret is missing.
+        """
+        if not self.totp_secret:
+            return None
+            
+        if pyotp is None:
+            logger.warning("pyotp is not installed. Cannot generate MFA code.")
+            return None
+            
+        try:
+            totp = pyotp.TOTP(self.totp_secret)
+            return totp.now()
+        except Exception as e:
+            logger.warning(f"Failed to generate TOTP code: {e}")
+            return None
+
+    async def _perform_mfa_auth(self) -> None:
+        """Perform Multi-Factor Authentication if credentials are provided."""
+        if not self.totp_endpoint:
+            return
+            
+        code = self._generate_totp()
+        if not code:
+            return
+            
+        if not self._client:
+            logger.warning("HTTP client not initialized before MFA authentication.")
+            return
+
+        payload = {self.totp_field: code}
+        try:
+            response = await self._client.post(self.totp_endpoint, json=payload)
+            if response.status_code >= 200 and response.status_code < 300:
+                logger.info(f"MFA authentication successful. Status code: {response.status_code}")
+            else:
+                logger.warning(f"MFA authentication failed. Status code: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Error during MFA authentication: {e}")
+

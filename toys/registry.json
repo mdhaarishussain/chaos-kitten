@@ -1,0 +1,150 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-02-10T12:00:00Z",
+  "profiles": {
+    "auth-bypass-basic": {
+      "name": "Basic Auth Bypass",
+      "description": "Attempts common authentication bypass techniques like SQLi in login forms and default credentials.",
+      "author": "chaos-kitten-core",
+      "category": "Authentication",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/auth_bypass.yaml",
+      "tags": ["auth", "sqli", "default-creds"]
+    },
+    "bola-idor-scanner": {
+      "name": "BOLA/IDOR Scanner",
+      "description": "Scans for Broken Object Level Authorization by manipulating resource IDs in API requests.",
+      "author": "chaos-kitten-core",
+      "category": "Authorization",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/bola.yaml",
+      "tags": ["bola", "idor", "authz"]
+    },
+    "business-logic-flaws": {
+      "name": "Business Logic Flaws",
+      "description": "Tests for common business logic vulnerabilities like negative quantities and race conditions.",
+      "author": "chaos-kitten-core",
+      "category": "Business Logic",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/business_logic.yaml",
+      "tags": ["logic", "race-condition"]
+    },
+    "command-injection-fuzz": {
+      "name": "Command Injection Fuzzer",
+      "description": "Fuzzes input fields with common OS command injection payloads.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/command_injection.yaml",
+      "tags": ["injection", "rce", "os-command"]
+    },
+    "crypto-weakness-check": {
+      "name": "Weak Cryptography Checker",
+      "description": "Checks for weak cryptographic algorithms and predictable random number generation.",
+      "author": "chaos-kitten-core",
+      "category": "Cryptography",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/crypto_weak.yaml",
+      "tags": ["crypto", "weak-ciphers"]
+    },
+    "csrf-tester": {
+      "name": "CSRF Tester",
+      "description": "Tests for Cross-Site Request Forgery vulnerabilities by omitting or manipulating CSRF tokens.",
+      "author": "chaos-kitten-core",
+      "category": "Session Management",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/csrf.yaml",
+      "tags": ["csrf", "session"]
+    },
+    "deserialization-attacks": {
+      "name": "Insecure Deserialization",
+      "description": "Attempts to exploit insecure deserialization vulnerabilities using common payloads.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/deserialization.yaml",
+      "tags": ["deserialization", "rce"]
+    },
+    "file-upload-bypass": {
+      "name": "File Upload Bypass",
+      "description": "Tests file upload endpoints for extension bypass, content-type spoofing, and malicious payloads.",
+      "author": "chaos-kitten-core",
+      "category": "File Upload",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/file_upload_bypass.yaml",
+      "tags": ["file-upload", "bypass"]
+    },
+    "graphql-introspection": {
+      "name": "GraphQL Introspection & Attacks",
+      "description": "Attempts to enable introspection, find hidden queries, and perform query batching attacks.",
+      "author": "chaos-kitten-core",
+      "category": "GraphQL",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/graphql.yaml",
+      "tags": ["graphql", "introspection", "batching"]
+    },
+    "jwt-manipulation": {
+      "name": "JWT Manipulation",
+      "description": "Tests JWT implementations for none algorithm, signature stripping, and weak secrets.",
+      "author": "chaos-kitten-core",
+      "category": "Authentication",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/jwt_manipulation.yaml",
+      "tags": ["jwt", "auth", "crypto"]
+    },
+    "mass-assignment-check": {
+      "name": "Mass Assignment Checker",
+      "description": "Attempts to modify read-only or hidden fields by injecting them into API requests.",
+      "author": "chaos-kitten-core",
+      "category": "Business Logic",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/mass_assignment.yaml",
+      "tags": ["mass-assignment", "logic"]
+    },
+    "nosql-injection": {
+      "name": "NoSQL Injection",
+      "description": "Tests for NoSQL injection vulnerabilities using operator manipulation and tautologies.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/nosql_injection.yaml",
+      "tags": ["nosql", "injection", "database"]
+    },
+    "path-traversal-fuzz": {
+      "name": "Path Traversal Fuzzer",
+      "description": "Fuzzes file paths and parameters with directory traversal payloads.",
+      "author": "chaos-kitten-core",
+      "category": "File Access",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/path_traversal.yaml",
+      "tags": ["lfi", "path-traversal", "file-access"]
+    },
+    "secret-exposure-scan": {
+      "name": "Secret Exposure Scanner",
+      "description": "Scans API responses for exposed secrets, API keys, and sensitive tokens.",
+      "author": "chaos-kitten-core",
+      "category": "Information Disclosure",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/secret_exposure.yaml",
+      "tags": ["secrets", "info-disclosure"]
+    },
+    "sql-injection-basic": {
+      "name": "Basic SQL Injection",
+      "description": "Tests for basic SQL injection vulnerabilities using common payloads and error-based techniques.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/sql_injection_basic.yaml",
+      "tags": ["sqli", "injection", "database"]
+    },
+    "ssrf-tester": {
+      "name": "SSRF Tester",
+      "description": "Tests for Server-Side Request Forgery by attempting to access internal services and metadata endpoints.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/ssrf.yaml",
+      "tags": ["ssrf", "injection", "network"]
+    },
+    "xss-reflected": {
+      "name": "Reflected XSS",
+      "description": "Tests for reflected Cross-Site Scripting vulnerabilities in API responses.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/xss_reflected.yaml",
+      "tags": ["xss", "injection", "client-side"]
+    },
+    "xxe-injection": {
+      "name": "XXE Injection",
+      "description": "Tests XML endpoints for XML External Entity injection vulnerabilities.",
+      "author": "chaos-kitten-core",
+      "category": "Injection",
+      "url": "https://raw.githubusercontent.com/mdhaarishussain/chaos-kitten/main/toys/xxe_injection.yaml",
+      "tags": ["xxe", "injection", "xml"]
+    }
+  }
+}

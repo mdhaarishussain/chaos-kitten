@@ -87,6 +87,11 @@ class Config:
             if "base_url" not in target:
                 raise ValueError("Missing required field: target.base_url")
 
+        # --- MFA/TOTP Validation & Defaults ---
+        auth = self._config.setdefault("auth", {})
+        # totp_secret and totp_endpoint are optional, but totp_field needs a default
+        if "totp_field" not in auth:
+            auth["totp_field"] = "code"  # Default value as per requirement
         # Validate adaptive config
         adaptive = self._config.get("adaptive", {})
         if "max_rounds" in adaptive:
@@ -121,6 +126,11 @@ class Config:
     def safety(self) -> Dict[str, Any]:
         """Get safety configuration."""
         return self._config.get("safety", {})
+
+    @property
+    def auth(self) -> Dict[str, Any]:
+        """Get authentication configuration including TOTP fields."""
+        return self._config.get("auth", {})
     
     @property
     def checkpoint_path(self) -> Path:

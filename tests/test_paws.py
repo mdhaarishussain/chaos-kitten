@@ -297,6 +297,140 @@ class TestExecutor:
         # We can't easily check if it's closed, but we can verify it exists
         assert executor._client is not None
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mfa_success(self):
+        """Test Case 1: Verify code is generated and POST request is sent."""
+        pytest.importorskip("pyotp")
+        totp_endpoint = "http://test.com/api/mfa"
+        base_url = "http://test.com"
+        
+        # A valid base32 string for pyotp
+        secret = "KITTEN_TEST_SECRET_MFA_B32_ABCDEF"
+        
+        route = respx.post(totp_endpoint).respond(status_code=200)
+        
+        executor = Executor(
+            base_url=base_url,
+            totp_secret=secret,
+            totp_endpoint=totp_endpoint,
+        )
+        
+        async with executor:
+            pass
+            
+        assert route.called
+        assert len(route.calls) == 1
+        
+        import json
+        request = route.calls.last.request
+        payload = json.loads(request.content.decode("utf-8"))
+        
+        assert "code" in payload
+        assert isinstance(payload["code"], str)
+        assert len(payload["code"]) == 6
+        assert payload["code"].isdigit()
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mfa_custom_field(self):
+        """Test Case 2: Verify custom totp_field ("otp") changes the JSON payload."""
+        pytest.importorskip("pyotp")
+        totp_endpoint = "http://test.com/api/mfa"
+        base_url = "http://test.com"
+        secret = "KITTEN_TEST_SECRET_MFA_B32_ABCDEF"
+        
+        route = respx.post(totp_endpoint).respond(status_code=200)
+        
+        executor = Executor(
+            base_url=base_url,
+            totp_secret=secret,
+            totp_endpoint=totp_endpoint,
+            totp_field="otp",
+        )
+        
+        async with executor:
+            pass
+            
+        assert route.called
+        
+        import json
+        request = route.calls.last.request
+        payload = json.loads(request.content.decode("utf-8"))
+        
+        assert "otp" in payload
+        assert "code" not in payload
+        assert len(payload["otp"]) == 6
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mfa_no_secret(self):
+        """Test Case 3: Verify no MFA auth attempt if totp_secret is None."""
+        totp_endpoint = "http://test.com/api/mfa"
+        base_url = "http://test.com"
+        
+        route = respx.post(totp_endpoint).respond(status_code=200)
+        
+        executor = Executor(
+            base_url=base_url,
+            totp_secret=None,
+            totp_endpoint=totp_endpoint,
+        )
+        
+        async with executor:
+            pass
+            
+        assert not route.called
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mfa_auth_failure(self, caplog):
+        """Test Case 4: Verify warnings logged but no crash on 401."""
+        pytest.importorskip("pyotp")
+        import logging
+        caplog.set_level(logging.WARNING)
+        
+        totp_endpoint = "http://test.com/api/mfa"
+        base_url = "http://test.com"
+        secret = "KITTEN_TEST_SECRET_MFA_B32_ABCDEF"
+        
+        route = respx.post(totp_endpoint).respond(status_code=401)
+        
+        executor = Executor(
+            base_url=base_url,
+            totp_secret=secret,
+            totp_endpoint=totp_endpoint,
+        )
+        
+        async with executor:
+            pass
+            
+        assert route.called
+        assert any(
+            "MFA authentication failed" in record.message and "401" in record.message
+            for record in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_mfa_no_endpoint(self):
+        """Test Case 5: Verify fast skip if secret is provided but no endpoint."""
+        base_url = "http://test.com"
+        secret = "KITTEN_TEST_SECRET_MFA_B32_ABCDEF"
+        
+        route = respx.post("http://test.com/api/mfa").respond(status_code=200)
+        
+        executor = Executor(
+            base_url=base_url,
+            totp_secret=secret,
+            totp_endpoint=None,
+        )
+        
+        async with executor:
+            pass
+            
+        assert not route.called
+
 
 class TestBrowserExecutor:
     """Tests for the browser automation module."""

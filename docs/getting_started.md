@@ -51,11 +51,13 @@ docker-compose run chaos-kitten scan --demo
 **Using Standalone Docker**
 
 Build the image:
+
 ```bash
 docker build -t chaos-kitten .
 ```
 
 Run a scan (mounting your current directory for config and reports):
+
 ```bash
 docker run --rm \
   -v $(pwd)/chaos-kitten.yaml:/app/chaos-kitten.yaml \
@@ -80,8 +82,8 @@ Open `chaos-kitten.yaml` and update:
 
 ```yaml
 target:
-  base_url: "http://localhost:3000"  # Your API URL
-  openapi_spec: "./openapi.json"      # Path to OpenAPI spec
+  base_url: "http://localhost:3000" # Your API URL
+  openapi_spec: "./openapi.json" # Path to OpenAPI spec
 
 agent:
   llm_provider: "anthropic"
@@ -106,10 +108,22 @@ chaos-kitten scan
 
 Chaos Mode goes beyond known attack signatures by generating structurally invalid inputs to discover unknown crashes, 500 errors, and hidden behaviors.
 
+**Example 1: Payment Security**
+
 ```bash
 # Enable chaos mode alongside normal scanning
 chaos-kitten scan --chaos --target http://localhost:5000
 
+**Example 2: Access Control**
+
+```bash
+chaos-kitten scan --goal "I want to check if admin endpoints are accessible to regular users"
+```
+
+**Example 3: Authentication Testing**
+
+```bash
+chaos-kitten scan --goal "test the authentication system for account takeover risks"
 # Adjust chaos intensity (1 = gentle, 5 = maximum carnage)
 chaos-kitten scan --chaos --chaos-level 5 --target http://localhost:5000
 ```
@@ -137,16 +151,39 @@ Chaos levels:
 | 4 | Destructive | Overflow + injection + nested attacks |
 | 5 | Maximum Carnage | Everything at once |
 
+## Authentication
+
+### MFA/TOTP Support
+
+Chaos Kitten supports bypassing basic MFA flows out-of-the-box by automatically generating and submitting a TOTP token (e.g., Google Authenticator, Microsoft Authenticator) during the authentication phase, enabling testing of MFA-protected APIs without manual code entry.
+
+To enable this feature, you must first install the `mfa` extra:
+
+```bash
+pip install '.[mfa]'
+# Alternatively, you can directly install the library:
+# pip install pyotp
+```
+
+You can then configure the MFA parameters within the `auth` block of your `chaos-kitten.yaml` configuration file:
+
+```yaml
+auth:
+  totp_secret: "YOUR_BASE32_SECRET_HERE" # The base32 secret used to generate the 6-digit code
+  totp_endpoint: "/api/mfa" # The endpoint to POST the code to
+  totp_field: "code" # The JSON field name to place the code into (defaults to "code")
+```
+
 ## Understanding Results
 
 ### Severity Levels
 
-| Level | Color | Description |
-|-------|-------|-------------|
-| CRITICAL | 🔴 | Immediate action required |
-| HIGH | 🟠 | Should be fixed soon |
-| MEDIUM | 🟡 | Should be addressed |
-| LOW | 🟢 | Minor issues |
+| Level    | Color | Description               |
+| -------- | ----- | ------------------------- |
+| CRITICAL | 🔴    | Immediate action required |
+| HIGH     | 🟠    | Should be fixed soon      |
+| MEDIUM   | 🟡    | Should be addressed       |
+| LOW      | 🟢    | Minor issues              |
 
 ### Sample Output
 
