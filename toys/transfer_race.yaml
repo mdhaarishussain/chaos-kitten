@@ -1,0 +1,22 @@
+name: "Double Spending Race Condition"
+category: "business_logic"
+severity: "critical"
+description: "Attempts double spending or withdrawal exceeding balance via race condition"
+concurrency:
+  count: 5
+  target_param: "amount"
+target_paths:
+  - "/transfer"
+  - "/api/transfer"
+  - "/withdraw"
+  - "/api/withdraw"
+target_fields:
+  - "amount"
+  - "transfer"
+  - "withdraw"
+success_indicators:
+  response_contains:
+    - "success"
+    - "transferred"
+  status_codes:
+    - 200

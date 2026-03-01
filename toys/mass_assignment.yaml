@@ -1,13 +1,13 @@
-# Mass Assignment / Parameter Pollution - Attack Profile
-# This file defines payloads for testing Mass Assignment and HTTP Parameter Pollution vulnerabilities
-# References: OWASP A08 (Software and Data Integrity Failures), CWE-915
+# Mass Assignment - Attack Profile
+# This file defines payloads for testing Mass Assignment vulnerabilities
+# References: OWASP API3:2023, CWE-915
 
 name: "Mass Assignment / Parameter Pollution"
 category: "integrity_failures"
 severity: "high"
-description: "Tests for mass assignment vulnerabilities where internal fields are exposed to modification, and parameter pollution attacks."
+description: "Tests for mass assignment vulnerabilities in JSON body and form data submissions, where internal fields are exposed and can be overwritten."
 
-# Fields commonly vulnerable to mass assignment
+# target_fields: Holds model field names only
 target_fields:
   - "role"
   - "is_admin"
@@ -32,8 +32,6 @@ target_fields:
   - "created_by"
   - "email_verified"
 
-# Attack payloads to test
-# These are key-value pairs or strings that might be injected into JSON bodies or query parameters
 payloads:
   # --- Privilege Escalation ---
   - '{"role": "admin"}'
@@ -77,15 +75,27 @@ payloads:
   - '{"created_by": "admin"}'
   - '{"organization_id": 1}'
 
-  # --- HTTP Parameter Pollution (Query/Form) ---
-  # These are conceptual representations; the engine should apply them as repeated params
-  - "id=1&id=2"  # Testing array injection or override
-  - "user=me&user=admin" # Testing if last value wins or array is created
-  - "role=user&role=admin"
-  - "email=user@example.com&email=admin@example.com"
-  - "fields=id,name&fields=password" # Testing field selection injection
+  # --- Nested Object Injection ---
+  - '{"user": {"is_admin": true}}'
+  - '{"user": {"role": "admin"}}'
+  - '{"profile": {"permissions": {"admin": true}}}'
+  - '{"attributes": {"role": "superuser"}}'
 
-# Indicators that suggest successful mass assignment or parameter pollution
+  # --- Dot-Notation Parameter Pollution ---
+  # Frameworks that parse dot-notation keys as nested paths may incorrectly
+  # map this to nested field access (e.g., user.permissions.admin = true)
+  - '{"user.permissions.admin": true}'
+
+  # --- Naming Variants ---
+  - '{"isStaff": true}'
+  - '{"is_staff": true}'
+  - '{"userRole": "admin"}'
+  - '{"accountBalance": 1000000}'
+  - '{"isVerified": true}'
+
+# NOTE: HTTP Parameter Pollution (HPP) payloads via URL-encoded strings 
+# were removed to prevent JSON schema mismatches per maintainer review.
+
 success_indicators:
   response_contains:
     # Privilege Escalation
@@ -109,6 +119,13 @@ success_indicators:
     # Ownership
     - '"user_id": 1'
     - '"owner_id": 1'
+
+    # Naming Variants Detection
+    - "isStaff"
+    - "is_staff"
+    - "userRole"
+    - "accountBalance"
+    - "isVerified"
     
     # General
     - "successfully updated"
@@ -118,47 +135,17 @@ success_indicators:
     - 200
     - 201
     
-  # If the response reflects the injected value without error
   diff_check: true
 
-# How to fix this vulnerability
+# behavior_change notes (Moving to comments as suggested):
+# - access to administrative panels granted
+# - unauthorized price modification reflected
+
 remediation: |
   Prevent Mass Assignment by explicitly defining which fields can be bound from client input.
-  
-  **1. Use DTOs (Data Transfer Objects) or Schemas:**
-  Don't bind input directly to database models. Create specific schemas for input that exclude internal fields.
-  
-  **Example (Python / FastAPI / Pydantic):**
-  
-  ```python
-  # ❌ BAD - Internals exposed
-  class User(BaseModel):
-      id: int
-      username: str
-      is_admin: bool = False  # Client can send {"is_admin": true}
-  
-  @app.post("/users")
-  def create_user(user: User):
-      return db.add(user)
+  Use DTOs (Data Transfer Objects) to decouple request input from internal database models.
+  Implement strict Allow-lists for all user-writable fields.
 
-  # ✅ GOOD - Explicit Create Schema
-  class UserCreate(BaseModel):
-      username: str
-      email: str
-      # is_admin and id are missing, so client cannot set them
-  
-  class UserDB(UserCreate):
-      id: int
-      is_admin: bool = False
-      
-  @app.post("/users")
-  def create_user(user_in: UserCreate):
-      user = UserDB(**user_in.dict(), is_admin=False) # Explicitly set unsafe fields
-      return db.add(user)
-  ```
-  
-  **2. Use `exclude` or `include` filters:**
-  Many frameworks allow whitelisting allowed parameters.
-  
-  **3. Validate Parameter Pollution:**
-  Ensure your server handles multiple parameters consistently (e.g., rejecting duplicates or taking the first one) and validate that the type matches expectations (e.g., string vs list).
+references:
+  - "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/"
+  - "https://cwe.mitre.org/data/definitions/915.html"

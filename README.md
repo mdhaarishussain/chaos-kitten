@@ -256,6 +256,11 @@ executor:
   concurrent_requests: 5
   timeout: 30
   rate_limit: 10
+  retry:
+    max_retries: 3           # Max attempts for rate-limited (429) requests
+    base_backoff: 1.0        # Initial wait time in seconds
+    max_backoff: 60.0        # Maximum wait time
+    jitter: true             # Add randomization to backoff
 
 safety:
   allowed_domains:

@@ -1,0 +1,18 @@
+name: "Race Condition Check"
+category: "business_logic"
+severity: "high"
+description: "Tests for race conditions by sending concurrent requests to endpoints dealing with limits or coupons"
+concurrency:
+  target_param: "coupon"
+  count: 10
+success_indicators:
+  response_contains: 
+    - "success"
+    - "redeemed"
+  status_codes:
+    - 200
+target_fields:
+  - "coupon"
+  - "voucher"
+  - "gift_card"
+  - "code"

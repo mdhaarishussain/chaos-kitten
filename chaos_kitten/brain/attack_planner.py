@@ -11,11 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
-from langchain_anthropic import ChatAnthropic
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
-from langchain_openai import ChatOpenAI
+# Moving langchain imports to local scope to prevent crashes during pre-flight checks
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +29,9 @@ class AttackProfile:
     success_indicators: dict[str, Any]
     remediation: str = ""
     references: list[str] = field(default_factory=list)
+    workflow: list[dict[str, Any]] = field(default_factory=list)
+    concurrency: dict[str, Any] = field(default_factory=dict)
+    target_paths: list[str] = field(default_factory=list)
 
 
 ATTACK_PLANNING_PROMPT = """You are a security expert analyzing an API endpoint for vulnerabilities.
@@ -89,6 +88,10 @@ class AttackPlanner:
         self.load_attack_profiles()
 
     def _init_llm(self) -> Any:
+        from langchain_anthropic import ChatAnthropic
+        from langchain_openai import ChatOpenAI
+        from langchain_ollama import ChatOllama
+
         if self.llm_provider == "anthropic":
             return ChatAnthropic(
                 model="claude-3-5-sonnet-20241022", temperature=self.temperature
@@ -131,8 +134,6 @@ class AttackPlanner:
                     "name",
                     "category",
                     "severity",
-                    "payloads",
-                    "target_fields",
                 ]
                 missing = [field_name for field_name in required_fields if field_name not in data]
 
@@ -144,7 +145,17 @@ class AttackPlanner:
 
                 payloads = data.get("payloads") or []
                 target_fields = data.get("target_fields") or []
-                if not isinstance(payloads, list) or not isinstance(target_fields, list):
+                workflow = data.get("workflow") or []
+                concurrency = data.get("concurrency") or {}
+
+                if not (payloads and target_fields) and not workflow and not concurrency:
+                    logger.warning(
+                        "Skipping %s: Must contain either payloads/target_fields or workflow or concurrency definition",
+                        file_path,
+                    )
+                    continue
+
+                if (payloads and not isinstance(payloads, list)) or (target_fields and not isinstance(target_fields, list)):
                     logger.warning(
                         "Skipping %s: 'payloads' and 'target_fields' must be lists",
                         file_path,
@@ -161,6 +172,9 @@ class AttackPlanner:
                     success_indicators=data.get("success_indicators", {}) or {},
                     remediation=str(data.get("remediation", "")),
                     references=[str(r) for r in (data.get("references", []) or [])],
+                    workflow=workflow,
+                    concurrency=concurrency,
+                    target_paths=data.get("target_paths") or [],
                 )
                 self.attack_profiles.append(profile)
                 logger.debug("Loaded attack profile: %s", profile.name)
@@ -171,8 +185,16 @@ class AttackPlanner:
 
         logger.info("Loaded %d attack profiles", len(self.attack_profiles))
 
-    def plan_attacks(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
-        """Plan attacks for a specific endpoint."""
+    def plan_attacks(self, endpoint: dict[str, Any], allowed_profiles: list[str] | None = None) -> list[dict[str, Any]]:
+        """Plan attacks for a specific endpoint.
+        
+        Args:
+            endpoint: The API endpoint to plan attacks for
+            allowed_profiles: Optional list of profile names to filter attacks by
+        
+        Returns:
+            List of planned attack dictionaries
+        """
         path = endpoint.get("path", "")
         method = endpoint.get("method", "GET")
         params = endpoint.get("parameters", [])
@@ -188,6 +210,9 @@ class AttackPlanner:
 
         attacks: list[dict[str, Any]] = []
         try:
+            from langchain_core.prompts import ChatPromptTemplate
+            from langchain_core.output_parsers import JsonOutputParser
+            
             prompt = ChatPromptTemplate.from_template(ATTACK_PLANNING_PROMPT)
             chain = prompt | self.llm | JsonOutputParser()
             generated = chain.invoke(
@@ -218,6 +243,14 @@ class AttackPlanner:
             attacks = self._plan_rule_based(endpoint)
 
         self._cache[cache_key] = attacks
+        
+        # Filter by allowed profiles if specified
+        if allowed_profiles:
+            attacks = [
+                a for a in attacks
+                if a.get("profile_name") in allowed_profiles
+            ]
+        
         return attacks
 
     def _normalize_llm_attacks(
@@ -303,6 +336,64 @@ class AttackPlanner:
         attacks: list[dict[str, Any]] = []
         
         for profile in self.attack_profiles:
+            # Special handling for Business Logic / Workflow / Concurrency
+            if profile.workflow or profile.concurrency:
+                # Check path match
+                path_match = False
+                if profile.target_paths:
+                    for tp in profile.target_paths:
+                        try:
+                            if re.search(tp, path):
+                                path_match = True
+                                break
+                        except re.error:
+                            if tp in path:
+                                path_match = True
+                                break
+                
+                # Check field match
+                field_match = False
+                matched_field = None
+                matched_location = None
+                
+                if not path_match and profile.target_fields:
+                    for field_name, location in fields:
+                        if any(
+                            self._field_matches_target(field_name, target)
+                            for target in profile.target_fields
+                        ):
+                            field_match = True
+                            matched_field = field_name
+                            matched_location = location
+                            break
+                
+                if path_match or field_match:
+                    indicators = profile.success_indicators or {}
+                    attacks.append({
+                        "type": profile.category,
+                        "name": profile.name,
+                        "profile_name": profile.name,
+                        "description": profile.description,
+                        "endpoint": path,
+                        "path": path,
+                        "method": method,
+                        "field": matched_field or "N/A",  # Might be N/A for path-based
+                        "location": matched_location or "N/A",
+                        "workflow": profile.workflow,
+                        "concurrency": profile.concurrency,
+                        "payloads": [], # No payloads for logic attacks usually
+                        "payload": {},
+                        "target_param": matched_field or "N/A",
+                        "expected_status": self._expected_status(indicators),
+                        "priority": self._severity_to_priority(profile.severity),
+                        "severity": profile.severity,
+                        "success_indicators": indicators,
+                        "expected_indicators": indicators,
+                        "remediation": profile.remediation,
+                        "references": profile.references,
+                    })
+                continue
+
             for field_name, location in fields:
                 if any(
                     self._field_matches_target(field_name, target)
@@ -400,97 +491,8 @@ class AttackPlanner:
             properties = schema.get("properties", {})
             for prop_name, prop_details in properties.items():
                 p_type = prop_details.get("type", "string")
-                targetable_fields.append({"name": prop_name, "location": "body", "type": p_type})
-
-        # Iterate through loaded profiles and find matches
-        for profile in self.attack_profiles:
-            # Special handling for GraphQL Security profile
-            if profile.name == "GraphQL Security":
-                # Check if endpoint path ends with /graphql
-                if endpoint_path.endswith("/graphql") or "graphql" in endpoint_path.lower():
-                    # Plan attacks for this endpoint
-                    # GraphQL usually has a single entry point, so we attack the 'query' or body
-                    attack_plan = {
-                        "profile_name": profile.name,
-                        "endpoint": endpoint_path,
-                        "method": method,
-                        "field": "query", # Virtual field name
-                        "location": "graphql", # Special location for executor
-                        "payloads": profile.payloads,
-                        "expected_indicators": profile.success_indicators,
-                        "severity": profile.severity
-                    }
-                    planned_attacks.append(attack_plan)
-                continue
-
-            # Special handling for file upload profile
-            if profile.name == "File Upload Bypass":
-                # Check if endpoint accepts multipart/form-data
-                request_body = endpoint.get("requestBody") or {}
-                content = request_body.get("content", {})
-                if "multipart/form-data" in content or "application/octet-stream" in content:
-                    # Find file fields
-                    schema = content.get("multipart/form-data", {}).get("schema", {}) or \
-                             content.get("application/octet-stream", {}).get("schema", {})
-                    
-                    properties = schema.get("properties", {})
-                    for prop_name, prop_details in properties.items():
-                        # Heuristic: verify if it looks like a file upload
-                        # OpenAPI 3.0: type: string, format: binary
-                        p_type = prop_details.get("type")
-                        p_format = prop_details.get("format")
-                        
-                        is_file = (p_type == "string" and p_format in ("binary", "base64")) or \
-                                  (prop_name.lower() in profile.target_fields)
-
-                        if is_file:
-                            attack_plan = {
-                                "profile_name": profile.name,
-                                "endpoint": endpoint_path,
-                                "method": method,
-                                "field": prop_name,
-                                "location": "file", # Special location for executor
-                                "payloads": profile.payloads,
-                                "expected_indicators": profile.success_indicators,
-                                "severity": profile.severity
-                            }
-                            planned_attacks.append(attack_plan)
-                continue
-
-            # ... (Standard logic for other profiles)
-            
-            for field_info in targetable_fields:
-                field_name = field_info["name"]
-                _ = field_info["type"] # Unused for now, but keeping for future type awareness
-                
-                # Check 1: Field name match (Exact or Fuzzy)
-                # Exact match
-                is_match = field_name in profile.target_fields
-                
-                # Fuzzy match (e.g., "user_email" matches "email" if "email" is a distinct word part)
-                if not is_match:
-                    # properly handle snake_case and other delimiters
-                    parts = re.split(r'[^a-zA-Z0-9]', field_name.lower())
-                    for target in profile.target_fields:
-                        if target.lower() in parts:
-                            is_match = True
-                            break
-                            
-                if is_match:
-                    # Check 2: Type compatibility (Basic)
-                    # Use categories to determine if type mismatch is critical
-                    # e.g., SQLi (string) vs ID (integer) - sometimes valid, sometimes not.
-                    # For now, we'll be permissive but prioritize string fields for injections.
-                    
-                    # Logic for filtering based on method/category
-                    # e.g. Don't test body interactions on GET requests unless strictly specific
-                    if field_info["location"] == "body" and method == "get":
-                        continue
-                    schema = media_obj.get("schema") or {}
-                    properties = schema.get("properties") if isinstance(schema, dict) else None
-                    if isinstance(properties, dict):
-                        for field_name in properties.keys():
-                            fields.append((str(field_name), "body"))
+                # Removed broken logic that tried to use targetable_fields before definition
+                fields.append((str(prop_name), "body"))
 
         if not fields:
             fields.append(("q", "query"))
@@ -588,6 +590,9 @@ class AttackPlanner:
 
     def suggest_payloads(self, attack_type: str, context: dict[str, Any]) -> list[str]:
         """Generate context-specific payloads using LLM intelligence."""
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import JsonOutputParser
+        
         prompt = ChatPromptTemplate.from_template(PAYLOAD_SUGGESTION_PROMPT)
         chain = prompt | self.llm | JsonOutputParser()
 
@@ -602,6 +607,8 @@ class AttackPlanner:
 
     def reason_about_field(self, field_name: str, field_type: str) -> str:
         """Use LLM to reason about potential vulnerabilities for a field."""
+        from langchain_core.prompts import ChatPromptTemplate
+        
         prompt = ChatPromptTemplate.from_template(REASONING_PROMPT)
         chain = prompt | self.llm
 
@@ -614,5 +621,210 @@ class AttackPlanner:
                 f"Test '{field_name}' of type '{field_type}' "
                 "with boundary values and injection strings."
             )
+
+
+# Default profile list for fallback when toys directory is not accessible
+default_profiles = [
+    "SQL Injection - Basic",
+    "XSS - Reflected",
+    "IDOR - Basic",
+    "BOLA - Broken Object Level Authorization",
+    "Command Injection",
+    "Path Traversal",
+    "XXE Injection",
+    "SSRF"
+]
+
+# Natural Language Attack Targeting Prompt
+NATURAL_LANGUAGE_PLANNING_PROMPT = """You are a security expert tasked with identifying which API endpoints are most relevant to test for a specific security goal.
+
+User's Goal: {goal}
+
+Available Endpoints:
+{endpoints}
+
+Available Attack Profiles:
+{profiles}
+
+Analyze the user's goal and identify:
+1. Which endpoints are most relevant to this goal (ranked by relevance)
+2. Which attack profiles should be applied to these endpoints
+3. Custom payload focus areas or testing priorities specific to this goal
+
+You must respond ONLY with valid JSON (no markdown, no explanations outside JSON):
+{{
+    "endpoints": [
+        {{
+            "method": "POST",
+            "path": "/api/checkout",
+            "relevance_score": 0.95,
+            "reason": "Handles payment processing, critical for price manipulation testing"
+        }}
+    ],
+    "profiles": ["IDOR - Basic", "Mass Assignment / Parameter Pollution", "BOLA - Broken Object Level Authorization"],
+    "focus": "Test for price/quantity manipulation in cart and checkout flows. Pay special attention to total calculation bypass and discount abuse."
+}}
+
+Remember: respond only with valid JSON matching the schema above. Do not include any explanatory text.
+"""
+
+
+class NaturalLanguagePlanner:
+    """Plans attacks based on natural language goals."""
+
+    def __init__(self, endpoints: list[dict[str, Any]], config: dict[str, Any]):
+        """Initialize the NL planner.
+
+        Args:
+            endpoints: List of all available API endpoints
+            config: Application configuration with LLM settings
+        """
+        self.endpoints = endpoints
+        self.config = config
+        self.llm = self._init_llm()
+
+    def _init_llm(self):
+        """Initialize the LLM based on config."""
+        agent_config = self.config.get("agent", {})
+        provider = agent_config.get("llm_provider", "anthropic").lower()
+        temperature = agent_config.get("temperature", 0.7)
+        
+        # Provider-specific default models
+        default_models = {
+            "openai": "gpt-4o",
+            "anthropic": "claude-3-5-sonnet-20241022",
+            "ollama": "llama3",
+        }
+        model = agent_config.get("model", default_models.get(provider, "claude-3-5-sonnet-20241022"))
+
+        if provider == "anthropic":
+            from langchain_anthropic import ChatAnthropic
+            return ChatAnthropic(model=model, temperature=temperature)
+        elif provider == "openai":
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(model=model, temperature=temperature)
+        elif provider == "ollama":
+            from langchain_ollama import ChatOllama
+            return ChatOllama(model=model, temperature=temperature)
+        else:
+            logger.warning("Unknown provider %s, defaulting to Anthropic", provider)
+            from langchain_anthropic import ChatAnthropic
+            return ChatAnthropic(model=model, temperature=temperature)
+
+    def plan(self, goal: str) -> dict[str, Any]:
+        """Plan attacks based on natural language goal.
+
+        Args:
+            goal: User's natural language security goal
+
+        Returns:
+            Dictionary with:
+                - endpoints: List of relevant endpoints with relevance scores
+                - profiles: List of attack profile names to apply
+                - focus: Custom payload focus description
+                - reasoning: LLM's reasoning (for logging)
+        """
+        # Load available attack profiles
+        attack_profiles = self._load_available_profiles()
+
+        # Format endpoints for LLM
+        endpoints_str = json.dumps(
+            [
+                {
+                    "method": ep.get("method", "GET"),
+                    "path": ep.get("path", ""),
+                    "params": [p.get("name", "") for p in ep.get("parameters", []) if isinstance(p, dict)],
+                    "body": list(((ep.get("requestBody") or {}).get("content", {}).get("application/json", {}).get("schema", {}).get("properties", {})).keys()),
+                }
+                for ep in self.endpoints
+            ],
+            indent=2
+        )
+
+        profiles_str = json.dumps(attack_profiles, indent=2)
+
+        # Create prompt
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import JsonOutputParser
+        
+        prompt = ChatPromptTemplate.from_template(NATURAL_LANGUAGE_PLANNING_PROMPT)
+        parser = JsonOutputParser()
+        chain = prompt | self.llm | parser
+
+        try:
+            logger.info(f"[GOAL] Planning attacks for goal: {goal}")
+            result = chain.invoke({
+                "goal": goal,
+                "endpoints": endpoints_str,
+                "profiles": profiles_str
+            })
+
+            # Log the reasoning
+            if result.get("endpoints"):
+                logger.info(f"[GOAL] LLM selected {len(result['endpoints'])} relevant endpoints")
+                for ep in result.get("endpoints", [])[:3]:  # Log top 3
+                    score = ep.get('relevance_score', 0)
+                    # Convert to float safely
+                    try:
+                        score_val = float(score)
+                    except (TypeError, ValueError):
+                        score_val = 0.0
+                    logger.info(
+                        f"[GOAL]   - {ep.get('method')} {ep.get('path')} "
+                        f"(score: {score_val:.2f})"
+                    )
+
+            if result.get("focus"):
+                logger.info(f"[GOAL] Focus area: {result['focus']}")
+
+            # Add reasoning for return
+            result["reasoning"] = f"LLM analysis for goal: '{goal}'"
+
+            return result
+
+        except Exception:
+            logger.exception("[GOAL] Natural language planning failed")
+            # Fallback: return all endpoints with no filtering
+            return {
+                "endpoints": [
+                    {
+                        "method": ep.get("method", "GET"),
+                        "path": ep.get("path", ""),
+                        "relevance_score": 0.5,
+                        "reason": "Fallback: LLM planning failed"
+                    }
+                    for ep in self.endpoints
+                ],
+                "profiles": ["SQL Injection - Basic", "XSS - Reflected", "IDOR - Basic"],
+                "focus": "Standard security testing (LLM planning unavailable)",
+                "reasoning": "Fallback: LLM planning failed"
+            }
+
+    def _load_available_profiles(self) -> list[str]:
+        """Load list of available attack profile names."""
+        try:
+            import os as _os
+            module_dir = _os.path.dirname(_os.path.abspath(__file__))
+            package_root = _os.path.dirname(_os.path.dirname(module_dir))
+            toys_dir = _os.path.join(package_root, "toys")
+            profile_files = glob.glob(_os.path.join(toys_dir, "*.yaml"))
+            if not profile_files:
+                return default_profiles
+            
+            # Load YAML name fields to match attack dict profile_name values
+            profile_names = []
+            for profile_file in profile_files:
+                try:
+                    with open(profile_file, 'r') as f:
+                        profile_data = yaml.safe_load(f)
+                        name = profile_data.get("name", _os.path.basename(profile_file).replace(".yaml", ""))
+                        profile_names.append(name)
+                except Exception:
+                    # Fallback to file-stem if YAML read fails
+                    profile_names.append(_os.path.basename(profile_file).replace(".yaml", ""))
+            
+            return profile_names if profile_names else default_profiles
+        except Exception:
+            return default_profiles
 
 

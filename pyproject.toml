@@ -58,6 +58,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mfa = [
+    "pyotp>=2.9.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",

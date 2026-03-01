@@ -1,0 +1,27 @@
+name: "Workflow Bypass: Skip Payment"
+category: "business_logic"
+severity: "critical"
+description: "Tests if payment step can be skipped in a checkout workflow"
+target_paths:
+  - "/checkout"
+  - "/api/checkout"
+  - "/api/order"
+workflow:
+  - id: "initiate_checkout"
+    method: "POST"
+    path: "/api/checkout/init"
+    payload: {"cart_id": "123"}
+  - id: "bypass_payment"
+    method: "POST"
+    path: "/api/checkout/complete"  # Skipping intermediary steps
+    payload: {"payment_status": "bypassed"}
+success_indicators:
+  response_contains:
+    - "confirmation"
+    - "order_id"
+  status_codes:
+    - 200
+    - 201
+target_fields:
+  - "checkout"
+  - "confirm"

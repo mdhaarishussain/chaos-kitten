@@ -1,0 +1,223 @@
+# Business Logic Abuse Attack Profile (Updated)
+# This file defines payloads for testing business logic vulnerabilities
+
+name: "Business Logic Abuse"
+category: "business_logic"
+severity: "high"
+description: "Tests for common business logic flaws including price manipulation, quantity abuse, workflow bypass, and race conditions"
+
+# Fields commonly vulnerable to business logic abuse
+target_fields:
+  - "price"
+  - "amount"
+  - "quantity"
+  - "qty"
+  - "total"
+  - "discount"
+  - "coupon"
+  - "status"
+  - "state"
+  - "workflow_state"
+  - "step"
+  - "level"
+  - "currency"
+  - "limit"
+  - "balance"
+  - "transfer_amount"
+  - "credits"
+
+success_indicators:
+  response_contains:
+    - "transaction accepted with negative value"
+    - "free purchase successful"
+    - "limit bypassed"
+    - "workflow step skipped"
+    - "unauthorized status change"
+    - "inventory did not decrease"
+    - "balance increased instead of decreased"
+    - "double spending successful"
+  status_codes:
+    - 200
+    - 201
+
+# Attack payloads to test
+payloads:
+  # --- Price/Amount Manipulation ---
+  # Zero value
+  - "0"
+  - "0.00"
+  
+  # Negative values (refund/credit hacks)
+  - "-1"
+  - "-100"
+  - "-0.01"
+  - "-1000.00"
+  
+  # Extremely small positive values (rounding errors)
+  - "0.00001"
+  - "0.001"
+  
+  # Integer overflow/underflow (max/min integers)
+  - "2147483647"
+  - "2147483648"
+  - "-2147483648"
+  - "9223372036854775807"
+  
+  # String representations of numbers
+  - "\"0\""
+  - "\"-100\""
+
+  # --- Currency/Unit Manipulation ---
+  # Switching currency codes to lower value currencies
+  - "JPY"
+  - "CNY"
+  - "INR"
+  - "RUB"
+  
+  # Invalid or test currencies
+  - "XXX"
+  - "TEST"
+  - "BTC"
+  
+  # --- Quantity/Limit Abuse ---
+  # Negative quantity (adding back to inventory or getting refund)
+  - "-5"   # negative quantity (already covered by -1/-100 above, but qty context)
+  
+  # Zero quantity
+  
+  # Exceeding typical limits (bulk abuse)
+  - "999"
+  - "9999"
+  - "1000000"
+  
+  # Fractional quantities (buying 0.5 of an item)
+  - "0.5"
+  - "1.5"
+
+  # --- Workflow/Status Bypass ---
+  # Skipping to final states
+  - "COMPLETED"
+  - "PAID"
+  - "APPROVED"
+  - "VERIFIED"
+  - "SHIPPED"
+  - "DELIVERED"
+  
+  # Reverting states
+  - "PENDING"
+  - "DRAFT"
+  - "CANCELLED"
+  
+  # Admin/Privileged states
+  - "ADMIN_REVIEW"
+  - "OVERRIDE"
+  
+  # Boolean logic flips
+  - "true"
+  - "false"
+  - "1"
+  - "0"
+
+  # --- Duplicate/Idempotency Abuse ---
+  # Replaying transaction IDs (UUIDs) - Requires dynamic generation in tool context, but static examples:
+  - "00000000-0000-0000-0000-000000000000"
+  - "uuid-bypass-test"
+  
+  # Empty or distinct idempotency keys
+  - ""
+  - "null"
+
+  # --- Race Conditions ---
+  # NOTE: requires parallel request harness to execute properly
+  # Simple duplicate transaction IDs to simulate parallel requests if the engine supports it
+  - "RACE-CONDITION-TEST-ID-1"
+  - "RACE-CONDITION-TEST-ID-1"
+  
+  # Multiple use of single-use tokens/coupons
+  - "SINGLE_USE_COUPON_123"
+  - "SINGLE_USE_COUPON_123"
+  - "GIFT_CARD_XYZ_50"
+  - "GIFT_CARD_XYZ_50"
+
+  # Insufficient funds transfer attempts
+  - "TRANSFER_ID_9999"
+  - "TRANSFER_ID_9999"
+
+
+  # --- Discount/Coupon Abuse ---
+  # Stacking coupons (simple reuse attempt)
+  - "SAVE10"
+  - "WELCOME20"
+  - "SAVE10 SAVE10" # space-separated hint for tools that accept multi-value fields
+  # Note: To test true stacking (applying multiple coupons), the engine would need multi-step scenario support.
+  
+  # expired or dev/test codes
+  - "DEV_100_OFF"
+  - "TEST_FREE"
+  - "ADMIN_DISCOUNT"
+
+remediation: |
+  # Business Logic Security Guidelines
+
+  1. **Server-Side Validation:**
+     Never trust client-side data for critical values like price, quantity, or status.
+     Recalculate totals on the server using trusted prices from the database.
+
+  2. **Range and Type Checking:**
+     Enforce strict limits on numeric inputs (e.g., quantity > 0, quantity < max_limit).
+     Disallow negative numbers for payments or transfers unless explicitly handled (refunds).
+
+  3. **State Machine Enforcement:**
+     Implement a strict state machine for workflows.
+     Verify that a transition from State A to State B is valid before updating.
+     Do not allow users to set arbitrary status values (e.g., 'PAID') directly.
+
+  4. **Concurrency Control:**
+     Use database transactions/locking (optimistic or pessimistic) to prevent race conditions.
+     Handle inventory checks and updates atomically.
+
+  5. **Idempotency:**
+     Implement idempotency keys for critical mutating operations (payments) to prevent double-processing.
+
+  # Python Example (Secure Order Processing)
+
+  from decimal import Decimal
+  from django.db import transaction
+
+  @transaction.atomic
+  def process_order(user, item_id, quantity, currency):
+      # 1. Validate inputs
+      if quantity <= 0:
+          raise ValueError("Quantity must be positive")
+      
+      if quantity > 10:
+          raise ValueError("Bulk limit exceeded")
+
+      # 2. Fetch trusted price from DB (DO NOT use client-provided price)
+      item = Item.objects.select_for_update().get(id=item_id) # Lock row
+      
+      # 3. Check inventory
+      if item.stock < quantity:
+          raise ValueError("Insufficient stock")
+
+      # 4. Calculate total
+      unit_price = item.price
+      total_cost = unit_price * Decimal(quantity)
+
+      # 5. Verify currency matches item/system currency
+      if currency != item.currency:
+          # Perform server-side conversion or reject
+          raise ValueError("Invalid currency")
+
+      # 6. Process Payment & Update State
+      charge_user(user, total_cost)
+      item.stock -= quantity
+      item.save()
+
+      return {"status": "success", "total": total_cost}
+
+references:
+  - "https://owasp.org/Top10/A04_2021-Insecure_Design/"
+  - "https://owasp.org/www-community/vulnerabilities/Business_logic_vulnerability"
+  - "https://cwe.mitre.org/data/definitions/840.html"
+  - "https://portswigger.net/web-security/logic-flaws"
