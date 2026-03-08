@@ -1,11 +1,21 @@
 """Security Report Generator."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 import json
 import logging
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound, TemplateError
+from chaos_kitten.litterbox.themes import get_theme
+
+HTML = None
+try:
+    from weasyprint import HTML
+    WEASYPRINT_AVAILABLE = True
+except ImportError:
+    WEASYPRINT_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +41,7 @@ class Reporter:
         output_format: str = "html",
         include_poc: bool = True,
         include_remediation: bool = True,
+        theme_config: Optional[Union[str, Dict[str, Any]]] = None,
     ) -> None:
         """Initialize the reporter.
 
@@ -39,11 +50,15 @@ class Reporter:
             output_format: Report format (html, markdown, json)
             include_poc: Include Proof of Concept scripts
             include_remediation: Include remediation suggestions
+            theme_config: Theme configuration for HTML reports.
+                Can be a preset name ("dark", "light", "corporate"),
+                a dict of overrides, or None for the default dark theme.
         """
         self.output_path = Path(output_path)
         self.output_format = output_format
         self.include_poc = include_poc
         self.include_remediation = include_remediation
+        self.theme = get_theme(theme_config)
 
         # Initialize template engine
         self._setup_template_engine()
@@ -60,64 +75,100 @@ class Reporter:
             target_url: URL that was scanned
 
         Returns:
-            Path to the generated report file
+            Path to the generated report file (or the last one if multiple formats)
         """
         # Create output directory
         self.output_path.mkdir(parents=True, exist_ok=True)
 
-        # Generate filename
-        # CI/CD Compatibility: If sarif, use standard names
-        if self.output_format == "sarif":
-            filename = "results.sarif"
-        else:
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"chaos-kitten-{timestamp}.{self._get_extension()}"
+        formats = [f.strip() for f in self.output_format.split(",")]
+        last_output_file = None
+        valid_formats = {"html", "pdf", "markdown", "json", "sarif", "junit"}
+        for fmt in formats:
+            if fmt not in valid_formats:
+                raise ValueError(f"Unknown format: '{fmt}'. Supported formats: {', '.join(sorted(valid_formats))}")
+            # Generate filename
+            # CI/CD Compatibility: If sarif, use standard names
+            if fmt == "sarif":
+                filename = "results.sarif"
+            elif fmt == "junit":
+                filename = "results.xml"
+            else:
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                filename = f"chaos-kitten-{timestamp}.{self._get_extension(fmt)}"
 
-        output_file = self.output_path / filename
+            output_file = self.output_path / filename
 
-        # Generate report based on format
-        if self.output_format == "html":
-            content = self._generate_html(scan_results, target_url)
-        elif self.output_format == "markdown":
-            content = self._generate_markdown(scan_results, target_url)
-        elif self.output_format == "sarif":
-            # Recalculate summary to get flat counts
-            vulns = self._validate_vulnerability_data(scan_results)
-            
-            # Pass validated vulns to sarif generator to avoid double validation
-            content = self._generate_sarif_from_vulns(vulns, target_url)
-            
-            # Also generate minimal results.json for the CI script
-            # The CI script expects report.critical, report.high etc.
-            summary = self._calculate_executive_summary(vulns)
-            counts = summary["severity_breakdown"]
+            # Generate report based on format
+            if fmt == "html":
+                content = self._generate_html(scan_results, target_url)
+                output_file.write_text(content, encoding="utf-8")
+            elif fmt == "pdf":
+                if not WEASYPRINT_AVAILABLE:
+                    logger.warning(
+                        "WeasyPrint not installed. Skipping PDF export. "
+                        "Install with: pip install chaos-kitten[pdf] or pip install weasyprint"
+                    )
+                    continue
+                content = self._generate_html(scan_results, target_url)
+                self._generate_pdf(content, output_file)
+            elif fmt == "markdown":
+                content = self._generate_markdown(scan_results, target_url)
+                output_file.write_text(content, encoding="utf-8")
+            elif fmt == "sarif":
+                # Recalculate summary to get flat counts
+                try:
+                    vulns = self._validate_vulnerability_data(scan_results)
+                except Exception:
+                    # Fallback if validation fails or already validated
+                    vulns = scan_results.get("vulnerabilities", [])
+                
+                # Pass validated vulns to sarif generator to avoid double validation
+                content = self._generate_sarif_from_vulns(vulns, target_url)
+                
+                # Also generate minimal results.json for the CI script
+                # The CI script expects report.critical, report.high etc.
+                summary = self._calculate_executive_summary(vulns)
+                counts = summary["severity_breakdown"]
 
-            ci_json = {
-                "critical": counts["critical"],
-                "high": counts["high"],
-                "medium": counts["medium"],
-                "low": counts["low"],
-                "total": summary["total_vulnerabilities"],
-                "vulnerabilities": vulns,
-            }
-            (self.output_path / "results.json").write_text(
-                json.dumps(ci_json, indent=2), encoding="utf-8"
-            )
-        else:
-            content = self._generate_json(scan_results, target_url)
+                ci_json = {
+                    "critical": counts["critical"],
+                    "high": counts["high"],
+                    "medium": counts["medium"],
+                    "low": counts["low"],
+                    "total": summary["total_vulnerabilities"],
+                    "vulnerabilities": vulns,
+                }
+                (self.output_path / "results.json").write_text(
+                    json.dumps(ci_json, indent=2), encoding="utf-8"
+                )
+                output_file.write_text(content, encoding="utf-8")
 
-        output_file.write_text(content, encoding="utf-8")
-        return output_file
+            elif fmt == "junit":
+                content = self._generate_junit(scan_results, target_url)
+                output_file.write_text(content, encoding="utf-8")
+            else:
+                content = self._generate_json(scan_results, target_url)
+                output_file.write_text(content, encoding="utf-8")
 
-    def _get_extension(self) -> str:
+            last_output_file = output_file
+
+        if last_output_file is None:
+            raise RuntimeError("No report was generated. Check that the requested format(s) are available.")
+
+        return last_output_file
+
+    def _get_extension(self, fmt: str = None) -> str:
         """Get file extension for the output format."""
+        fmt = fmt or self.output_format
         extensions = {
             "html": "html",
+            "pdf": "pdf",
             "markdown": "md",
             "json": "json",
             "sarif": "sarif",
+            "junit": "xml",
         }
-        return extensions.get(self.output_format, "txt")
+        return extensions.get(fmt, "txt")
 
     def _setup_template_engine(self) -> None:
         """Set up Jinja2 template engine with proper error handling."""
@@ -336,266 +387,337 @@ class Reporter:
 
         return processed
 
-    def _generate_html(self, results: Dict[str, Any], target: str) -> str:
-        """Generate HTML report using Jinja2 template.
+    def _generate_pdf(self, html_content: str, output_path: Path) -> None:
+        """Generate PDF report from HTML content using WeasyPrint.
 
         Args:
-            results: Vulnerability scan results
-            target: Target URL that was scanned
-
-        Returns:
-            Generated HTML report content
-
-        Raises:
-            TemplateError: If template rendering fails
-            ValueError: If vulnerability data is invalid
+            html_content: Rendered HTML content string
+            output_path: Path to save the PDF file
         """
         try:
-            # Validate and process vulnerability data
-            vulnerabilities = self._validate_vulnerability_data(results)
-
-            # Calculate executive summary
-            summary = self._calculate_executive_summary(vulnerabilities)
-
-            # Process vulnerabilities for display
-            processed_vulns = [
-                self._process_vulnerability_for_display(vuln)
-                for vuln in vulnerabilities
-            ]
-
-            # Prepare template context
-            context = {
-                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "target_url": target,
-                "version": "0.1.0",  # TODO: Get from package metadata
-                "endpoints_tested": summary["endpoints_tested"],
-                "total_vulns": summary["total_vulnerabilities"],
-                "critical_count": summary["severity_breakdown"]["critical"],
-                "high_count": summary["severity_breakdown"]["high"],
-                "medium_count": summary["severity_breakdown"]["medium"],
-                "low_count": summary["severity_breakdown"]["low"],
-                "vulnerabilities": processed_vulns,
-            }
-
-            # Load and render template
-            template = self._load_template("report.html")
-            return template.render(**context)
-
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid vulnerability data: {e}") from e
-        except TemplateError as e:
-            raise TemplateError(f"HTML template rendering failed: {e}") from e
-
-    def _generate_markdown(self, results: Dict[str, Any], target: str) -> str:
-        """Generate Markdown report using Jinja2 template.
-
-        Args:
-            results: Vulnerability scan results
-            target: Target URL that was scanned
-
-        Returns:
-            Generated Markdown report content
-
-        Raises:
-            TemplateError: If template rendering fails
-            ValueError: If vulnerability data is invalid
-        """
-        try:
-            # Validate and process vulnerability data
-            vulnerabilities = self._validate_vulnerability_data(results)
-
-            # Calculate executive summary
-            summary = self._calculate_executive_summary(vulnerabilities)
-
-            # Process vulnerabilities for display (Markdown doesn't need CSS classes)
-            processed_vulns = []
-            for vuln in vulnerabilities:
-                processed = vuln.copy()
-                processed["cat_message"] = (
-                    f"🐱 I knocked this vase over! Found {vuln.get('severity', 'medium')} severity issue."
-                )
-                processed["poc"] = vuln.get(
-                    "proof_of_concept", ""
-                )  # Map proof_of_concept to poc for template
-                processed_vulns.append(processed)
-
-            # Prepare template context
-            context = {
-                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "target_url": target,
-                "version": "0.1.0",  # TODO: Get from package metadata
-                "endpoints_tested": summary["endpoints_tested"],
-                "total_vulns": summary["total_vulnerabilities"],
-                "critical_count": summary["severity_breakdown"]["critical"],
-                "high_count": summary["severity_breakdown"]["high"],
-                "medium_count": summary["severity_breakdown"]["medium"],
-                "low_count": summary["severity_breakdown"]["low"],
-                "vulnerabilities": processed_vulns,
-                "endpoints": [  # Mock endpoint data for template
-                    {
-                        "method": vuln.get("method", "GET"),
-                        "path": vuln.get("endpoint") or "/unknown",
-                        "status": "Tested",
-                    }
-                    for vuln in vulnerabilities
-                ],
-                "time_taken": "< 1 minute",  # Mock timing data
-            }
-
-            # Load and render template
-            template = self._load_template("report.md")
-            return template.render(**context)
-
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid vulnerability data: {e}") from e
-        except TemplateError as e:
-            raise TemplateError(f"Markdown template rendering failed: {e}") from e
-
-    def _generate_json(self, results: Dict[str, Any], target: str) -> str:
-        """Generate JSON report.
-
-        Args:
-            results: Vulnerability scan results
-            target: Target URL that was scanned
-
-        Returns:
-            Generated JSON report content
-        """
-        try:
-            # Validate and process vulnerability data
-            vulnerabilities = self._validate_vulnerability_data(results)
-
-            # Calculate executive summary
-            summary = self._calculate_executive_summary(vulnerabilities)
-
-            # Prepare JSON structure
-            report_data = {
-                "metadata": {
-                    "generated_at": datetime.now().isoformat(),
-                    "target_url": target,
-                    "tool_version": "0.1.0",
-                    "report_format": "json",
-                },
-                "executive_summary": summary,
-                "vulnerabilities": vulnerabilities,
-            }
-
-            return json.dumps(report_data, indent=2, ensure_ascii=False)
-
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid vulnerability data for JSON export: {e}") from e
-
-    def _generate_sarif(self, results: Dict[str, Any], target: str) -> str:
-        """Generate SARIF report.
-
-        Args:
-            results: Vulnerability scan results
-            target: Target URL that was scanned
-
-        Returns:
-            Generated SARIF report content
-        """
-        try:
-            vulnerabilities = self._validate_vulnerability_data(results)
-            return self._generate_sarif_from_vulns(vulnerabilities, target)
+            template_dir = Path(__file__).parent / "templates"
+            HTML(string=html_content, base_url=str(template_dir)).write_pdf(target=output_path)
+            logger.info(f"Generated PDF report: {output_path}")
         except Exception as e:
-            raise ValueError(f"Failed to generate SARIF report: {e}") from e
+            logger.error(f"Failed to generate PDF report: {e}")
+            raise
 
-    def _generate_sarif_from_vulns(self, vulnerabilities: List[Dict[str, Any]], target: str) -> str:
-        """Generate SARIF report from validated vulnerabilities.
 
-        Args:
-            vulnerabilities: List of validated vulnerability findings
-            target: Target URL that was scanned
+    def _generate_html(self, results: Dict[str, Any], target: str) -> str:
+            """Generate HTML report using Jinja2 template.
 
-        Returns:
-            Generated SARIF report content
-        """
-        try:
-            rules = []
-            sarif_results = []
-            rule_indices = {}
+            Args:
+                results: Vulnerability scan results
+                target: Target URL that was scanned
 
-            for index, vuln in enumerate(vulnerabilities):
-                vuln_type = vuln.get("type", "unknown")
+            Returns:
+                Generated HTML report content
 
-                # Add rule if not exists
-                if vuln_type not in rule_indices:
-                    rule_indices[vuln_type] = len(rules)
-                    rules.append(
+            Raises:
+                TemplateError: If template rendering fails
+                ValueError: If vulnerability data is invalid
+            """
+            try:
+                # Validate and process vulnerability data
+                vulnerabilities = self._validate_vulnerability_data(results)
+
+                # Calculate executive summary
+                summary = self._calculate_executive_summary(vulnerabilities)
+
+                # Process vulnerabilities for display
+                processed_vulns = [
+                    self._process_vulnerability_for_display(vuln)
+                    for vuln in vulnerabilities
+                ]
+
+                # Prepare template context
+                context = {
+                    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "target_url": target,
+                    "version": "0.1.0",  # TODO: Get from package metadata
+                    "endpoints_tested": summary["endpoints_tested"],
+                    "total_vulns": summary["total_vulnerabilities"],
+                    "critical_count": summary["severity_breakdown"]["critical"],
+                    "high_count": summary["severity_breakdown"]["high"],
+                    "medium_count": summary["severity_breakdown"]["medium"],
+                    "low_count": summary["severity_breakdown"]["low"],
+                    "vulnerabilities": processed_vulns,
+                    "theme": self.theme,
+                }
+
+                # Load and render template
+                template = self._load_template("report.html")
+                return template.render(**context)
+
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid vulnerability data: {e}") from e
+            except TemplateError as e:
+                raise TemplateError(f"HTML template rendering failed: {e}") from e
+
+    
+    def _generate_markdown(self, results: Dict[str, Any], target: str) -> str:
+            """Generate Markdown report using Jinja2 template.
+
+            Args:
+                results: Vulnerability scan results
+                target: Target URL that was scanned
+
+            Returns:
+                Generated Markdown report content
+
+            Raises:
+                TemplateError: If template rendering fails
+                ValueError: If vulnerability data is invalid
+            """
+            try:
+                # Validate and process vulnerability data
+                vulnerabilities = self._validate_vulnerability_data(results)
+
+                # Calculate executive summary
+                summary = self._calculate_executive_summary(vulnerabilities)
+
+                # Process vulnerabilities for display (Markdown doesn't need CSS classes)
+                processed_vulns = []
+                for vuln in vulnerabilities:
+                    processed = vuln.copy()
+                    processed["cat_message"] = (
+                        f"🐱 I knocked this vase over! Found {vuln.get('severity', 'medium')} severity issue."
+                    )
+                    processed["poc"] = vuln.get(
+                        "proof_of_concept", ""
+                    )  # Map proof_of_concept to poc for template
+                    processed_vulns.append(processed)
+
+                # Prepare template context
+                context = {
+                    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "target_url": target,
+                    "version": "0.1.0",  # TODO: Get from package metadata
+                    "endpoints_tested": summary["endpoints_tested"],
+                    "total_vulns": summary["total_vulnerabilities"],
+                    "critical_count": summary["severity_breakdown"]["critical"],
+                    "high_count": summary["severity_breakdown"]["high"],
+                    "medium_count": summary["severity_breakdown"]["medium"],
+                    "low_count": summary["severity_breakdown"]["low"],
+                    "vulnerabilities": processed_vulns,
+                    "endpoints": [  # Mock endpoint data for template
                         {
-                            "id": vuln_type,
-                            "name": vuln.get("title", vuln_type),
-                            "shortDescription": {
-                                "text": vuln.get("title", vuln_type)
-                            },
-                            "fullDescription": {"text": vuln.get("description", "")},
-                            "help": {"text": vuln.get("remediation", "")},
-                            "helpUri": "https://github.com/mdhaarishussain/chaos-kitten",
-                            "defaultConfiguration": {
-                                "level": self._map_severity_to_sarif(
-                                    vuln.get("severity", "medium")
-                                )
-                            },
+                            "method": vuln.get("method", "GET"),
+                            "path": vuln.get("endpoint") or "/unknown",
+                            "status": "Tested",
+                        }
+                        for vuln in vulnerabilities
+                    ],
+                    "time_taken": "< 1 minute",  # Mock timing data
+                }
+
+                # Load and render template
+                template = self._load_template("report.md")
+                return template.render(**context)
+
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid vulnerability data: {e}") from e
+            except TemplateError as e:
+                raise TemplateError(f"Markdown template rendering failed: {e}") from e
+
+    
+    def _generate_json(self, results: Dict[str, Any], target: str) -> str:
+            """Generate JSON report.
+
+            Args:
+                results: Vulnerability scan results
+                target: Target URL that was scanned
+
+            Returns:
+                Generated JSON report content
+            """
+            try:
+                # Validate and process vulnerability data
+                vulnerabilities = self._validate_vulnerability_data(results)
+
+                # Calculate executive summary
+                summary = self._calculate_executive_summary(vulnerabilities)
+
+                # Prepare JSON structure
+                report_data = {
+                    "metadata": {
+                        "generated_at": datetime.now().isoformat(),
+                        "target_url": target,
+                        "tool_version": "0.1.0",
+                        "report_format": "json",
+                    },
+                    "executive_summary": summary,
+                    "vulnerabilities": vulnerabilities,
+                }
+
+                return json.dumps(report_data, indent=2, ensure_ascii=False)
+
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Invalid vulnerability data for JSON export: {e}") from e
+
+    
+    def _generate_sarif_from_vulns(self, vulnerabilities: List[Dict[str, Any]], target: str) -> str:
+            """Generate SARIF report from validated vulnerabilities.
+
+            Args:
+                vulnerabilities: List of validated vulnerability findings
+                target: Target URL that was scanned
+
+            Returns:
+                Generated SARIF report content
+            """
+            try:
+                rules = []
+                sarif_results = []
+                rule_indices = {}
+
+                for index, vuln in enumerate(vulnerabilities):
+                    vuln_type = vuln.get("type", "unknown")
+
+                    # Add rule if not exists
+                    if vuln_type not in rule_indices:
+                        rule_indices[vuln_type] = len(rules)
+                        rules.append(
+                            {
+                                "id": vuln_type,
+                                "name": vuln.get("title", vuln_type),
+                                "shortDescription": {
+                                    "text": vuln.get("title", vuln_type)
+                                },
+                                "fullDescription": {"text": vuln.get("description", "")},
+                                "help": {"text": vuln.get("remediation", "")},
+                                "helpUri": "https://github.com/mdhaarishussain/chaos-kitten",
+                                "defaultConfiguration": {
+                                    "level": self._map_severity_to_sarif(
+                                        vuln.get("severity", "medium")
+                                    )
+                                },
+                            }
+                        )
+
+                    # Add result
+                    sarif_results.append(
+                        {
+                            "ruleId": vuln_type,
+                            "ruleIndex": rule_indices[vuln_type],
+                            "level": self._map_severity_to_sarif(
+                                vuln.get("severity", "medium")
+                            ),
+                            "message": {"text": vuln.get("description", "")},
+                            "locations": [
+                                {
+                                    "physicalLocation": {
+                                        "artifactLocation": {
+                                            # Use endpoint as location, fallback to target if empty
+                                            "uri": vuln.get("endpoint") or target
+                                        }
+                                    }
+                                }
+                            ],
+                            "properties": {
+                                "payload": vuln.get("payload", ""),
+                                "proof_of_concept": vuln.get("proof_of_concept", ""),
+                                "remediation": vuln.get("remediation", ""),
+                                "evidence": vuln.get("evidence", "")
+                            }
                         }
                     )
 
-                # Add result
-                sarif_results.append(
-                    {
-                        "ruleId": vuln_type,
-                        "ruleIndex": rule_indices[vuln_type],
-                        "level": self._map_severity_to_sarif(
-                            vuln.get("severity", "medium")
-                        ),
-                        "message": {"text": vuln.get("description", "")},
-                        "locations": [
-                            {
-                                "physicalLocation": {
-                                    "artifactLocation": {
-                                        # Use endpoint as location, fallback to target if empty
-                                        "uri": vuln.get("endpoint") or target
-                                    }
+                sarif_report = {
+                    "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+                    "version": "2.1.0",
+                    "runs": [
+                        {
+                            "tool": {
+                                "driver": {
+                                    "name": "chaos-kitten",
+                                    "version": "0.1.0",
+                                    "rules": rules,
                                 }
-                            }
-                        ],
-                        "properties": {
-                            "payload": vuln.get("payload", ""),
-                            "proof_of_concept": vuln.get("proof_of_concept", ""),
-                            "remediation": vuln.get("remediation", ""),
-                            "evidence": vuln.get("evidence", "")
+                            },
+                            "results": sarif_results,
                         }
-                    }
-                )
+                    ],
+                }
 
-            sarif_report = {
-                "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
-                "version": "2.1.0",
-                "runs": [
-                    {
-                        "tool": {
-                            "driver": {
-                                "name": "chaos-kitten",
-                                "version": "0.1.0",
-                                "rules": rules,
-                            }
-                        },
-                        "results": sarif_results,
-                    }
-                ],
-            }
+                return json.dumps(sarif_report, indent=2)
 
-            return json.dumps(sarif_report, indent=2)
+            except Exception as e:
+                raise ValueError(f"Failed to generate SARIF report: {e}") from e
+
+    
+    def _map_severity_to_sarif(self, severity: str) -> str:
+            """Map severity to SARIF level."""
+            severity = severity.lower()
+            if severity in ["critical", "high"]:
+                return "error"
+            elif severity == "medium":
+                return "warning"
+            else:
+                return "note"
+
+    
+    def _generate_junit(self, results: Dict[str, Any], target: str) -> str:
+        """Generate JUnit XML report.
+
+        Args:
+            results: Vulnerability scan results
+            target: Target URL that was scanned
+
+        Returns:
+            Generated JUnit XML report content
+        """
+        try:
+            vulnerabilities = self._validate_vulnerability_data(results)
+            summary = self._calculate_executive_summary(vulnerabilities)
+            
+            # Create root element <testsuites>
+            testsuites = ET.Element("testsuites")
+            testsuites.set("name", "Chaos Kitten Security Scan")
+            testsuites.set("tests", str(summary["total_vulnerabilities"]))
+            testsuites.set("failures", str(summary["severity_breakdown"]["critical"] + summary["severity_breakdown"]["high"]))
+            testsuites.set("time", "0")
+
+            for severity in ["critical", "high", "medium", "low"]:
+                count = summary["severity_breakdown"].get(severity, 0)
+                if count == 0:
+                    continue
+                    
+                suite = ET.SubElement(testsuites, "testsuite")
+                suite.set("name", f"Security Vulnerabilities - {severity.title()}")
+                suite.set("tests", str(count))
+                suite.set("failures", str(count) if severity in ["critical", "high"] else "0")
+                
+                severity_vulns = [v for v in vulnerabilities if v.get("severity", "medium").lower() == severity]
+                
+                for vuln in severity_vulns:
+                    testcase = ET.SubElement(suite, "testcase")
+                    testcase.set("name", vuln.get("title", "Unknown Vulnerability"))
+                    testcase.set("classname", f"Security.{severity.title()}.{vuln.get('type', 'generic')}")
+                    testcase.set("time", "0")
+                    
+                    if severity in ["critical", "high"]:
+                        failure = ET.SubElement(testcase, "failure")
+                        failure.set("message", vuln.get("description", ""))
+                        failure.set("type", vuln.get("type", "SecurityVulnerability"))
+                        failure.text = (
+                            f"Severity: {severity.upper()}\n"
+                            f"Endpoint: {vuln.get('endpoint', 'Unknown')}\n"
+                            f"Remediation: {vuln.get('remediation', '')}\n"
+                            f"Proof of Concept: {vuln.get('proof_of_concept', '')}"
+                        )
+                    else:
+                        system_out = ET.SubElement(testcase, "system-out")
+                        system_out.text = (
+                            f"Severity: {severity.upper()}\n"
+                            f"Description: {vuln.get('description', '')}\n"
+                            f"Endpoint: {vuln.get('endpoint', 'Unknown')}\n"
+                            f"Remediation: {vuln.get('remediation', '')}"
+                        )
+
+            xml_str = ET.tostring(testsuites, encoding="utf-8")
+            parsed = minidom.parseString(xml_str)
+            return parsed.toprettyxml(indent="  ")
 
         except Exception as e:
-            raise ValueError(f"Failed to generate SARIF report: {e}") from e
-
-    def _map_severity_to_sarif(self, severity: str) -> str:
-        """Map severity to SARIF level."""
-        severity = severity.lower()
-        if severity in ["critical", "high"]:
-            return "error"
-        elif severity == "medium":
-            return "warning"
-        else:
-            return "note"
+            raise ValueError(f"Failed to generate JUnit report: {e}") from e

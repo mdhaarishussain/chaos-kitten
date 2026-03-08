@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple, Dict, List
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Severity(Enum):
     CRITICAL = "critical"
@@ -49,6 +52,21 @@ class ResponseAnalyzer:
                 r"Warning.*sqlite_",
                 r"Warning.*SQLite3::",
                 r"SQL syntax.*MariaDB",
+                r"SQLSTATE",
+            ],
+            "nosql_injection": [
+                 r"\bMongoError\b",
+                 r"E11000 duplicate key",
+                 r"cannot read property .* of undefined"
+            ],
+            "command_injection": [
+                r"(?:/bin/sh|bash): .*command not found",
+                r"sh: .*syntax error near"
+            ],
+            "xxe": [
+                r"DOCTYPE is disallowed",
+                r"Entity .* not defined",
+                r"XML parser.*external entity"
             ],
             "secrets": [
                 # AWS: AKIA followed by 16 chars (simplified)
@@ -73,6 +91,8 @@ class ResponseAnalyzer:
                 r"\/bin\/bash",
                 r"win\.ini",
                 r"system\.ini",
+                r"(?:fopen|include|readfile)\(.*\): .*Permission denied",
+                r"file not readable",
             ]
         }
 
@@ -159,6 +179,75 @@ class ResponseAnalyzer:
 
         return None
     
+    def analyze_error_messages(self, response: dict) -> dict:
+        """
+        Analyze response content for common error patterns indicating potential vulnerabilities.
+        
+        Args:
+            response: Dictionary containing response details. Expected key 'body'.
+            
+        Returns:
+            Dictionary with error analysis results:
+            {
+                "error_category": "...",
+                "confidence": 0.0-1.0,
+                "indicators": [...]
+            }
+        """
+        body = response.get("body", "")
+        # Handle cases where body might be None or bytes
+        if body is None:
+            body = ""
+        elif not isinstance(body, str):
+            try:
+                # Attempt to stringify if it's bytes or other object
+                body = str(body)
+            except (TypeError, ValueError, AttributeError):
+                body = ""
+            
+        indicators = []
+        detected_types = []
+        
+        # Categories of interest for error message analysis
+        target_categories = ["sql_injection", "nosql_injection", "command_injection", "xxe", "path_traversal"]
+        
+        for category in target_categories:
+            if category not in self.patterns:
+                continue
+                
+            for pattern in self.patterns[category]:
+                if re.search(pattern, body, re.IGNORECASE):
+                    # We found a match. Add pattern to indicators.
+                    # Note: pattern is a regex string.
+                    indicators.append(pattern)
+                    if category not in detected_types:
+                        detected_types.append(category)
+
+        if not detected_types:
+            return {
+                "error_category": None,
+                "confidence": 0.0,
+                "indicators": []
+            }
+            
+        # Determine primary category
+        # If multiple categories are detected, pick the first one (arbitrary priority)
+        # or we could return a list. The requirement implies a single return dict structure but mentions "error_category" (singular).
+        primary_category = detected_types[0]
+        
+        # Calculate confidence
+        # Simple heuristic: More indicators = higher confidence
+        confidence = 0.9 if len(indicators) >= 2 else 0.7
+        
+        msg = f"Detected error indicating {primary_category}: {indicators}"
+        logger.info(msg)
+        
+        return {
+            "error_category": primary_category,
+            "confidence": confidence,
+            "indicators": indicators
+        }
+
     def detect_secrets(self, response: str) -> Tuple[bool, float, str]:
         """Check for exposed secrets."""
         for pattern in self.patterns["secrets"]:

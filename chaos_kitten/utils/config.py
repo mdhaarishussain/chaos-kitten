@@ -15,9 +15,14 @@ class Config:
         Args:
             config_path: Path to configuration file
         """
-        self.config_path = Path(config_path)
+        self._config_path = Path(config_path)
         self._config: Dict[str, Any] = {}
-    
+
+    @property
+    def config_path(self) -> Path:
+        """Get path to configuration file."""
+        return self._config_path
+
     def load(self) -> Dict[str, Any]:
         """Load and validate configuration.
         
@@ -81,6 +86,18 @@ class Config:
             # Default to REST behavior
             if "base_url" not in target:
                 raise ValueError("Missing required field: target.base_url")
+
+        # --- MFA/TOTP Validation & Defaults ---
+        auth = self._config.setdefault("auth", {})
+        # totp_secret and totp_endpoint are optional, but totp_field needs a default
+        if "totp_field" not in auth:
+            auth["totp_field"] = "code"  # Default value as per requirement
+        # Validate adaptive config
+        adaptive = self._config.get("adaptive", {})
+        if "max_rounds" in adaptive:
+            max_rounds = adaptive["max_rounds"]
+            if not isinstance(max_rounds, int) or max_rounds < 1 or max_rounds > 10:
+                raise ValueError("adaptive.max_rounds must be an integer between 1 and 10")
     
     @property
     def target(self) -> Dict[str, Any]:
@@ -90,14 +107,38 @@ class Config:
     @property
     def agent(self) -> Dict[str, Any]:
         """Get agent configuration."""
-        return self._config.get("agent", {})
+        agent_config = dict(self._config.get("agent", {}))
+        if "max_concurrent_agents" not in agent_config:
+            agent_config["max_concurrent_agents"] = 3
+        return agent_config
     
     @property
     def executor(self) -> Dict[str, Any]:
         """Get executor configuration."""
         return self._config.get("executor", {})
+
+    @property
+    def recon(self) -> Dict[str, Any]:
+        """Get reconnaissance configuration."""
+        return self._config.get("recon", {})
     
     @property
     def safety(self) -> Dict[str, Any]:
         """Get safety configuration."""
         return self._config.get("safety", {})
+
+    @property
+    def auth(self) -> Dict[str, Any]:
+        """Get authentication configuration including TOTP fields."""
+        return self._config.get("auth", {})
+    
+    @property
+    def adaptive(self) -> Dict[str, Any]:
+        """Get adaptive configuration."""
+        return self._config.get("adaptive", {})
+
+    @property
+    def checkpoint_path(self) -> Path:
+        """Get path to the checkpoint file."""
+        return Path(self._config.get("checkpoint_path", ".chaos-checkpoint.json"))
+

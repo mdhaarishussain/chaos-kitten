@@ -1,0 +1,119 @@
+# IDOR - Insecure Direct Object Reference (Basic) Attack Profile
+# This file defines basic payloads for testing IDOR vulnerabilities
+
+name: "IDOR - Basic"
+category: "access-control"
+severity: "high"
+description: "Tests for Insecure Direct Object Reference (IDOR) vulnerabilities where APIs expose direct references to internal objects without proper authorization checks, allowing unauthorized access to other users' resources."
+
+# Fields commonly vulnerable to IDOR attacks
+target_fields:
+  - "id"
+  - "user_id"
+  - "userId"
+  - "account_id"
+  - "accountId"
+  - "profile_id"
+  - "order_id"
+  - "document_id"
+  - "file_id"
+  - "resource_id"
+  - "ref"
+  - "uid"
+
+# Attack payloads - each is a plain string ID value to inject
+payloads:
+  # Sequential integer IDs (horizontal privilege escalation)
+  - "1"
+  - "2"
+  - "3"
+  - "10"
+  - "100"
+  - "999"
+  - "1001"
+  - "9999"
+  
+  # Admin / privileged IDs (vertical privilege escalation)
+  - "0"
+  - "-1"
+  - "admin"
+  - "root"
+  - "administrator"
+  - "system"
+  
+  # Large / boundary values
+  - "99999"
+  - "2147483647"
+  - "9223372036854775807"
+  
+  # UUID enumeration
+  - "00000000-0000-0000-0000-000000000000"
+  - "00000000-0000-0000-0000-000000000001"
+  - "00000000-0000-0000-0000-000000000002"
+  - "11111111-1111-1111-1111-111111111111"
+  - "a8098c1a-f86e-11da-bd1a-00112444be1e"
+  - "123e4567-e89b-12d3-a456-426614174000"
+
+# Indicators that suggest successful IDOR exploitation
+# NOTE: Successful IDOR is primarily detected by id-mismatch (e.g., user requests id=2 but
+# authenticated as user=1 and receives id=2's data). response_contains checks for fields that
+# should NEVER appear in a properly-scoped response.
+success_indicators:
+  response_contains:
+    - "ssn"           # Social Security Number - highly sensitive
+    - "credit_card"   # Payment card data - should never leak
+    - "driver_license" # Government ID - unauthorized access
+  
+  status_codes:
+    - 200  # Successful access when should be 403/401
+
+# How to fix IDOR vulnerabilities
+remediation: |
+  Implement object-level authorization checks on every data access.
+  Verify that the authenticated user owns or has permission to access
+  the requested resource before returning it.
+  
+  **Server-Side Authorization Checks**:
+  
+  ```python
+  # Python (Flask) Example
+  @app.route('/api/orders/<int:order_id>')
+  @login_required
+  def get_order(order_id):
+      order = Order.query.get_or_404(order_id)
+      
+      # ✅ GOOD - Verify ownership
+      if order.user_id != current_user.id:
+          abort(403, "You don't have permission to access this order")
+      
+      return jsonify(order)
+  ```
+  
+  ```javascript
+  // Node.js (Express) Example
+  app.get('/api/profiles/:id', authenticate, async (req, res) => {
+    const profile = await Profile.findById(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    
+    // ✅ GOOD - Check ownership
+    if (profile.userId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    return res.json(profile);
+  });
+  ```
+  
+  **Key Principles:**
+  - Never trust client-supplied IDs without authorization
+  - Always scope database queries to the authenticated user
+  - Apply principle of least privilege
+  - Use framework-level security features when available
+
+references:
+  - "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/"
+  - "https://cwe.mitre.org/data/definitions/639.html"  # Insecure Direct Object Reference
+  - "https://cwe.mitre.org/data/definitions/285.html"  # Improper Authorization (vertical privilege escalation)
+  - "https://portswigger.net/web-security/access-control/idor"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
+

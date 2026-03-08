@@ -1,67 +1,18 @@
-# Race Condition Detection - Business Logic Attack Profile
-# Detects race conditions in state transitions and concurrent request handling
-
-name: "Race Condition - State Manipulation"
-category: "business-logic"
+name: "Race Condition Check"
+category: "business_logic"
 severity: "high"
-description: "Tests for race conditions in state transitions by executing concurrent requests that modify shared state"
-attack_type: "race-condition"
-requires_concurrency: true
-requires_state: true
-concurrent_requests: 5
-timing_sensitive: true
-
-# Fields that are often vulnerable to race conditions
-target_fields:
-  - "balance"
-  - "quantity"
-  - "inventory"
-  - "points"
-  - "credit"
-  - "count"
-  - "amount"
-  - "status"
-  - "reservation"
-
-# Payloads for incrementing/decrementing operations
-payloads:
-  - "+1"
-  - "-1"
-  - "+100"
-  - "-100"
-  - "*2"
-  - "/2"
-
+description: "Tests for race conditions by sending concurrent requests to endpoints dealing with limits or coupons"
+concurrency:
+  target_param: "coupon"
+  count: 10
 success_indicators:
-  # Look for unexpected state results from concurrent modifications
-  response_contains:
-    - "duplicated"
-    - "conflict"
-    - "race"
+  response_contains: 
+    - "success"
+    - "redeemed"
   status_codes:
-    - 409  # Conflict
-    - 500  # Server error (race condition bug)
-  # After concurrent requests, final state should not exceed expected value
-
-# State transitions for detecting race conditions
-state_transitions:
-  - name: "debit_then_check"
-    steps:
-      - action: "POST"
-        target: "/debit"
-        payload: { "amount": 100 }
-      - action: "GET"
-        target: "/balance"
-        expect: "balance should be reduced by 100"
-
-remediation: |
-  Implement proper locking mechanisms:
-  - Use database transactions with appropriate isolation levels
-  - Implement optimistic locking with version numbers
-  - Use distributed locks for shared resources
-  - Apply state machine validation before state transitions
-  - Use idempotency tokens for critical operations
-
-references:
-  - "https://owasp.org/www-community/attacks/Race_Conditions"
-  - "https://cheatsheetseries.owasp.org/cheatsheets/Transaction_Safety_Cheat_Sheet.html"
+    - 200
+target_fields:
+  - "coupon"
+  - "voucher"
+  - "gift_card"
+  - "code"

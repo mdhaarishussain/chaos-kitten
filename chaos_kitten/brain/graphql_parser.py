@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union, Tuple
 from urllib.parse import urlparse
 import httpx
 
@@ -118,7 +118,7 @@ class GraphQLParser:
     }
     """
 
-    def __init__(self, endpoint_url: str | None = None, schema_path: str | Path | None = None) -> None:
+    def __init__(self, endpoint_url: Optional[str] = None, schema_path: Optional[Union[str, Path]] = None) -> None:
         """Initialize with either a live endpoint or local schema file.
 
         Args:
@@ -135,7 +135,7 @@ class GraphQLParser:
             # Requirements don't strictly forbid it, but let's be safe.
             pass
 
-    def introspect(self) -> dict[str, Any]:
+    def introspect(self) -> Dict[str, Any]:
         """Send introspection query to live endpoint, return schema.
         
         Returns:
@@ -170,7 +170,7 @@ class GraphQLParser:
             logger.error(f"Failed to introspect GraphQL endpoint: {e}")
             raise
 
-    def parse_schema(self) -> dict[str, Any]:
+    def parse_schema(self) -> Dict[str, Any]:
         """Parse a local .graphql or .json schema file.
         
         Returns:
@@ -225,7 +225,7 @@ class GraphQLParser:
             logger.error(f"Failed to parse schema file: {e}")
             raise
 
-    def get_queries(self) -> list[dict[str, Any]]:
+    def get_queries(self) -> List[Dict[str, Any]]:
         """Extract all Query type fields with arguments."""
         if not self.schema:
             return []
@@ -233,7 +233,7 @@ class GraphQLParser:
         query_type_name = self.schema["__schema"].get("queryType", {}).get("name", "Query")
         return self._get_fields_for_type(query_type_name)
 
-    def get_mutations(self) -> list[dict[str, Any]]:
+    def get_mutations(self) -> List[Dict[str, Any]]:
         """Extract all Mutation type fields with arguments."""
         if not self.schema:
             return []
@@ -245,7 +245,7 @@ class GraphQLParser:
         mutation_type_name = mutation_type_obj.get("name", "Mutation")
         return self._get_fields_for_type(mutation_type_name)
 
-    def get_types(self) -> list[dict[str, Any]]:
+    def get_types(self) -> List[Dict[str, Any]]:
         """Extract all custom types with their fields."""
         if not self.schema:
             return []
@@ -256,7 +256,7 @@ class GraphQLParser:
                 types.append(type_def)
         return types
 
-    def _get_fields_for_type(self, type_name: str) -> list[dict[str, Any]]:
+    def _get_fields_for_type(self, type_name: str) -> List[Dict[str, Any]]:
         fields = []
         types = self.schema["__schema"]["types"]
 
@@ -280,7 +280,7 @@ class GraphQLParser:
             })
         return fields
 
-    def _resolve_type_name(self, type_ref: dict[str, Any] | None) -> str:
+    def _resolve_type_name(self, type_ref: Optional[Dict[str, Any]]) -> str:
         """Helper to reconstruct type signature (e.g. String!, [User])."""
         if not type_ref:
             return "Unknown"
@@ -296,7 +296,7 @@ class GraphQLParser:
         else:
             return name if name else "Unknown"
 
-    def to_endpoints(self) -> list[dict[str, Any]]:
+    def to_endpoints(self) -> List[Dict[str, Any]]:
         """Convert GraphQL operations to endpoint-like format for the AttackPlanner."""
         endpoints = []
 

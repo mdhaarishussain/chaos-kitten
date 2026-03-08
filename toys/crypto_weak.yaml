@@ -1,0 +1,76 @@
+name: Weak Cryptography Usage
+category: cryptography
+severity: high
+description: >
+  Detects weak, outdated, or insecure cryptographic implementations including
+  broken hashing algorithms, weak encryption modes, insecure TLS versions,
+  predictable random number generation, and poor key management practices.
+
+target_fields:
+  - "password"
+  - "secret"
+  - "key"
+  - "token"
+  - "hash"
+  - "cipher"
+  - "encryption"
+  - "api_key"
+  - "private_key"
+  - "certificate"
+payloads:
+  #Weak Hashing
+  - "\\bmd5\\s*\\("
+  - "\\bsha1\\s*\\("
+  - "Content-MD5"
+  - "\\bhash\\s*=\\s*['\"][a-fA-F0-9]{32}['\"]"
+  #Weak Encryption
+  - "Cipher\\.getInstance\\(.*(DES|ECB|RC4).*\\)"
+  - "algorithm\\s*[:=]\\s*['\"](DES|3DES|RC4)['\"]"
+  - "AES/ECB/"
+  - "\\bIV\\s*=\\s*['\"]0000000000000000['\"]"
+  #Weak TLS/SSL Protocols
+  - "\\bSSLv2\\b"
+  - "\\bSSLv3\\b"
+  - "\\bTLSv1\\.0\\b"
+  - "\\bTLSv1\\.1\\b"
+  - "verify\\s*=\\s*False"
+  #Random Number Generation
+  - "Math\\.random\\(\\)"
+  - "java\\.util\\.Random"
+  - "srand\\(time\\(NULL\\)\\)"
+  #Key Management
+  - "-----BEGIN RSA PRIVATE KEY-----"
+  - "\"alg\":\\s*\"none\""
+  - "PBKDF2.*iterations\\s*[:=]\\s*[0-9]{1,3}(?!00)"
+
+success_indicators:
+  response_contains:
+    - "Content-MD5"
+    - "verify=False"
+    - "\"alg\": \"none\""
+    - "BEGIN RSA PRIVATE KEY"
+    - "\\bMD5\\b" 
+    - "\\bSHA1\\b"
+    - "\\bSSLv[23]\\b"
+    - "\\bTLSv1\\.[01]\\b"
+    - "\\bDES\\b"
+    - "\\bECB\\b"
+  status_codes:
+    - 200
+
+remediation: |
+  Upgrade cryptographic primitives to modern, authenticated standards.
+  
+  Steps:
+  - Encryption: Replace DES/3DES/RC4 with AES-256-GCM or ChaCha20-Poly1305.
+  - Hashing: Replace MD5/SHA1 with Argon2, scrypt, or bcrypt for passwords; SHA-256/SHA-3 for integrity.
+  - Modes: Never use ECB mode. Use AEAD (Authenticated Encryption with Associated Data) like GCM.
+  - TLS: Disable SSLv2/v3 and TLS 1.0/1.1. Enforce TLS 1.2 or 1.3 only.
+  - RNG: Use cryptographically secure PRNGs (e.g., /dev/urandom, java.security.SecureRandom).
+  - Secrets: Move hardcoded keys to a Secret Management Service (AWS KMS, HashiCorp Vault).
+
+references:
+  - "https://cwe.mitre.org/data/definitions/327.html"
+  - "https://cwe.mitre.org/data/definitions/321.html"
+  - "https://cwe.mitre.org/data/definitions/338.html"
+  - "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/"
