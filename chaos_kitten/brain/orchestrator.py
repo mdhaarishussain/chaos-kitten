@@ -42,6 +42,7 @@ class AgentState(TypedDict):
     planned_attacks: List[Dict[str, Any]]
     results: List[Dict[str, Any]]
     findings: List[Dict[str, Any]]
+    business_logic_findings: List[Dict[str, Any]]
 
 
 def parse_openapi(state: AgentState) -> Dict[str, Any]:
