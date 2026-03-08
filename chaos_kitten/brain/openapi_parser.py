@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """OpenAPI/Swagger specification parser.
 
 This module provides the `OpenAPIParser` class, which parses OpenAPI 3.x and 
@@ -28,7 +30,6 @@ Examples:
     dict_keys(['BearerAuth', 'ApiKey'])
 """
 
-from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -191,7 +192,7 @@ class OpenAPIParser:
         
         Args:
             parameters (List[Dict[str, Any]]): List of parameter definitions.
-            consumes (List[str] | None): Swagger 2.0 consumes list for media type selection.
+            consumes (Optional[List[str]]): Swagger 2.0 consumes list for media type selection.
             
         Returns:
             Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]: 
@@ -317,14 +318,29 @@ class OpenAPIParser:
                 variables = server_obj.get('variables', {})
                 
                 # Perform variable substitution
-                # Uses default value if available
+                # Uses default value if available, falls back to first enum value
                 for var_name, var_info in variables.items():
-                    default_val = var_info.get('default', '')
+                    if 'default' in var_info:
+                        default_val = var_info['default']
+                    elif 'enum' in var_info and var_info['enum']:
+                        default_val = var_info['enum'][0]
+                        logger.warning(
+                            "Server variable '%s' has no default; "
+                            "falling back to first enum value: %s",
+                            var_name, default_val,
+                        )
+                    else:
+                        default_val = ''
+                        logger.warning(
+                            "Server variable '%s' has no default or enum values; "
+                            "substituting empty string",
+                            var_name,
+                        )
                     url = url.replace(f"{{{var_name}}}", str(default_val))
                 
                 servers.append(url)
         
-        elif 'host' in self.spec:
+        elif self.spec.get('swagger') == '2.0':
             # Swagger 2.0
             schemes = self.spec.get('schemes', ['https'])
             host = self.spec.get('host')
@@ -334,9 +350,13 @@ class OpenAPIParser:
             if base_path and not base_path.startswith('/'):
                 base_path = '/' + base_path
             
-            # Construct URLs for each scheme
-            for scheme in schemes:
-                servers.append(f"{scheme}://{host}{base_path}")
+            if host:
+                # Construct URLs for each scheme
+                for scheme in schemes:
+                    servers.append(f"{scheme}://{host}{base_path}")
+            else:
+                # If host is missing, fallback to basePath or '/'
+                servers.append(base_path if base_path else '/')
         
         return servers
 

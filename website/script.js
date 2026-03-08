@@ -62,4 +62,76 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Fetch and display contributors
+    fetchContributors();
 });
+
+async function fetchContributors() {
+    // GUARD: Check if contributors grid element exists before attempting any DOM writes
+    // If this script runs on a page without the #contributors-grid element, grid will be null
+    // and subsequent operations (grid.innerHTML, grid.appendChild) will throw an unhandled exception
+    const grid = document.getElementById('contributors-grid');
+    if (!grid) {
+        console.warn('Contributors grid element not found. Skipping contributor loading.');
+        return;
+    }
+    
+    const repo = 'mdhaarishussain/chaos-kitten';
+    // NOTE: GitHub API rate limiting issue - unauthenticated requests are limited to 60/hour
+    // Current approach lacks:
+    // 1. Authentication (via server-side proxy or token) to increase rate limit to 5000/hour
+    // 2. Proper pagination handling - while per_page=100 covers current 17 contributors,
+    //    growing contributor count or high page traffic could exhaust the rate limit
+    // 3. Link header parsing for multi-page results
+    // TODO: Implement one of the following:
+    //   - Add server-side proxy to authenticate requests
+    //   - Implement proper pagination with Link header handling
+    //   - Add response caching with expiration
+    const contributorsUrl = `https://api.github.com/repos/${repo}/contributors?per_page=100`;
+
+    try {
+        const response = await fetch(contributorsUrl);
+        if (!response.ok) throw new Error('Failed to fetch contributors');
+        
+        const contributors = await response.json();
+        
+        // Clear loading skeletons
+        grid.innerHTML = '';
+        
+        // Display contributors
+        contributors.forEach(contributor => {
+            const card = createContributorCard(contributor);
+            grid.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error fetching contributors:', error);
+        // Display error message or default contributors
+        grid.innerHTML = '<p style="text-align: center; color: var(--text-muted); grid-column: 1/-1;">Failed to load contributors. Please check back later.</p>';
+    }
+}
+
+function createContributorCard(contributor) {
+    const card = document.createElement('div');
+    card.className = 'contributor-card';
+    
+    const name = contributor.login;
+    const avatarUrl = contributor.avatar_url;
+    const profileUrl = contributor.html_url;
+    const contributions = contributor.contributions;
+    
+    card.innerHTML = `
+        <div class="contributor-avatar">
+            <img src="${avatarUrl}" alt="${name}" title="${name}">
+        </div>
+        <div class="contributor-name">${name}</div>
+        <div class="contributor-role">${contributions} contribution${contributions !== 1 ? 's' : ''}</div>
+        <div class="contributor-links">
+            <a href="${profileUrl}" target="_blank" rel="noopener noreferrer" class="contributor-link" title="GitHub Profile">
+                <i class="fab fa-github"></i>
+            </a>
+        </div>
+    `;
+    
+    return card;
+}

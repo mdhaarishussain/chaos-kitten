@@ -180,20 +180,91 @@ class ResponseAnalyzer:
                 confidence=0.6
             )
             
-        # 4. Timing Anomalies (Profile based)
+        # 4. Cache Poisoning Detection (High/Medium Confidence)
+        cp_finding = self.check_cache_poisoning(response, payload)
+        if cp_finding:
+             cp_finding.endpoint = endpoint
+             cp_finding.payload = payload
+             return cp_finding
+
+        # 5. Timing Anomalies (Profile based)
         # Note: Generic timing check without baseline is hard, so we rely on profile 'response_time_gt'
         # which is handled in _check_custom_indicators usually.
         
         return None
 
+
+    def check_cache_poisoning(self, response: dict, payload: str) -> Optional[Finding]:
+        """Detect potential cache poisoning vulnerabilities.
+        
+        Checks for:
+        1. Unkeyed input reflection in headers/body with permissive caching.
+        2. Missing Vary header when headers affect the response.
+        """
+        if not payload:
+            return None
+            
+        headers = response.get("headers", {})
+        # Normalize headers to lowercase
+        headers_lower = {k.lower(): v for k, v in headers.items()}
+        
+        cache_control = headers_lower.get("cache-control", "").lower()
+        body = response.get("body", "")
+
+        # Key indicators for caching
+        # Parse directives properly 
+        is_cacheable = False
+        if cache_control:
+            directives = [d.strip() for d in cache_control.split(',')]
+            is_cacheable = any(d == 'public' or (d.startswith('max-age=') and d != 'max-age=0') or (d.startswith('s-maxage=') and d != 's-maxage=0') for d in directives)
+            is_cacheable = is_cacheable and 'no-store' not in directives
+
+        reflected_in_header = False
+        reflected_header_name = ""
+        for h_name, h_val in headers.items():
+            if payload in str(h_val):
+                reflected_in_header = True
+                reflected_header_name = h_name
+                break
+        
+        reflected_in_body = payload in body
+
+        if (reflected_in_header or reflected_in_body) and is_cacheable:
+             # Check for Vary header
+             vary_header = headers_lower.get("vary", "")
+             vary_list = [v.strip().lower() for v in vary_header.split(',')]
+             
+             # If reflected in header, check if that header is in Vary
+             if reflected_in_header:
+                 if reflected_header_name.lower() in vary_list:
+                     return None # Safe because of Vary header
+             
+             confidence = 0.9 if reflected_in_header else 0.6 
+             evidence = f"Payload '{payload}' reflected in {'header (' + reflected_header_name + ')' if reflected_in_header else 'body'} and response is CACHEABLE."
+             if reflected_in_header and reflected_header_name.lower() not in vary_list:
+                 evidence += f" Header '{reflected_header_name}' missing from Vary."
+                 
+             return Finding(
+                vulnerability_type="Cache Poisoning",
+                severity=Severity.HIGH,
+                evidence=evidence,
+                recommendation="Ensure unkeyed inputs are not reflected or add 'Vary' header. Disable caching for reflected content.",
+                confidence=confidence
+            )
+        
+        return None
+
     def _check_custom_indicators(self, response: dict, indicators: dict) -> Optional[Finding]:
-        """Check against success indicators defined in the attack profile."""
+        """Check against success indicators defined in the attack profile.
+        
+        Note: The `response_time_gt` indicator is expected to be in seconds.
+        """
         if not indicators:
             return None
             
         body = response.get("body", "")
         status_code = response.get("status_code")
-        elapsed_ms = response.get("elapsed_ms", 0) / 1000.0  # convert to seconds
+        elapsed_s = response.get("elapsed_ms", 0) / 1000.0  # convert to seconds
 
         # Check response_contains
         if "response_contains" in indicators:
@@ -220,10 +291,10 @@ class ResponseAnalyzer:
         # Check response_time_gt
         if "response_time_gt" in indicators:
             limit = indicators["response_time_gt"]
-            if elapsed_ms > limit:
+            if elapsed_s > limit:
                  return Finding(
                     vulnerability_type="",
-                    evidence=f"Response time {elapsed_ms:.2f}s > {limit}s",
+                    evidence=f"Response time {elapsed_s:.2f}s > {limit}s",
                     confidence=0.8
                 )
 

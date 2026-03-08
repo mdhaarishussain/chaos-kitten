@@ -245,3 +245,68 @@ class TestReporter:
         with pytest.raises(ValueError) as excinfo:
             reporter.generate(bad_vuln, "http://target.com")
         assert "Invalid vulnerability data" in str(excinfo.value)
+
+    # ---- Theming Tests ----
+
+    def test_default_theme_applied(self, tmp_path, sample_scan_results):
+        """HTML report contains the default dark CSS variables when no theme_config is given."""
+        reporter = Reporter(output_path=tmp_path, output_format="html")
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        # Default dark theme values
+        assert "--bg-dark: #0d1117" in content
+        assert "--bg-card: #161b22" in content
+
+    def test_custom_theme_overrides(self, tmp_path, sample_scan_results):
+        """Passing a custom dict overrides specific CSS variables."""
+        reporter = Reporter(
+            output_path=tmp_path,
+            output_format="html",
+            theme_config={"primary_color": "#ff0000"},
+        )
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        assert "--accent-purple: #ff0000" in content
+
+    def test_light_theme_preset(self, tmp_path, sample_scan_results):
+        """The 'light' preset produces light palette variables."""
+        reporter = Reporter(
+            output_path=tmp_path,
+            output_format="html",
+            theme_config="light",
+        )
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        assert "--bg-dark: #f8f9fa" in content
+        assert "--bg-card: #ffffff" in content
+
+    def test_custom_logo_in_report(self, tmp_path, sample_scan_results):
+        """A custom logo_url renders an <img> tag in the header."""
+        reporter = Reporter(
+            output_path=tmp_path,
+            output_format="html",
+            theme_config={"logo_url": "https://example.com/logo.png"},
+        )
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        assert "https://example.com/logo.png" in content
+        assert "<img" in content
+
+    def test_company_name_in_footer(self, tmp_path, sample_scan_results):
+        """A custom company_name appears in the footer."""
+        reporter = Reporter(
+            output_path=tmp_path,
+            output_format="html",
+            theme_config={"company_name": "Acme Corp"},
+        )
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        assert "Acme Corp" in content
+
+    def test_dark_mode_toggle_present(self, tmp_path, sample_scan_results):
+        """HTML report contains the theme toggle button and inline JS."""
+        reporter = Reporter(output_path=tmp_path, output_format="html")
+        report_path = reporter.generate(sample_scan_results, "http://target.com")
+        content = report_path.read_text(encoding="utf-8")
+        assert 'id="themeToggle"' in content
+        assert "toggleTheme" in content

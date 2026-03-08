@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Chaos Kitten – Privacy Policy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --bg-main: #050712;
+            --bg-card: #0c0f1b;
+            --bg-card-soft: #111525;
+            --accent-pink: #ff3b9a;
+            --accent-purple: #7b5cff;
+            --accent-cyan: #21e6ff;
+            --accent-yellow: #ffd66b;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-subtle: rgba(148, 163, 184, 0.2);
+            --radius-lg: 18px;
+            --shadow-card: 0 24px 60px rgba(0, 0, 0, 0.65);
+            --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: radial-gradient(circle at top left, #1a1037 0, #050712 45%),
+                radial-gradient(circle at bottom right, #071e33 0, #050712 55%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 24px 12px 40px;
+        }
+
+        .shell {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Top bar with Go Back button */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: rgba(31, 41, 55, 0.95);
+            color: #e5e7eb;
+        }
+
+        .back-btn span.icon {
+            font-size: 14px;
+            transform: translateY(0.5px);
+        }
+
+        /* Header */
+        header.page-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .page-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(123, 92, 255, 0.1);
+            border: 1px solid rgba(123, 92, 255, 0.35);
+            font-size: 12px;
+            color: #c4b5fd;
+            margin-bottom: 16px;
+        }
+
+        .page-title {
+            font-size: clamp(2rem, 4vw, 2.5rem);
+            line-height: 1.2;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 12px;
+            background: linear-gradient(90deg, #22e6ff, #ff3b9a);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .last-updated {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 4px 10px;
+            background: rgba(15, 23, 42, 0.85);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            border: 1px solid rgba(55, 65, 81, 0.6);
+        }
+
+        /* Content panel */
+        .content-panel {
+            background: linear-gradient(145deg, #0b1020, #050816);
+            border-radius: var(--radius-lg);
+            padding: 32px 28px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-card);
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        .section-title .icon {
+            font-size: 20px;
+        }
+
+        .section-content p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+
+        .section-content ul {
+            list-style: none;
+            padding-left: 0;
+            margin: 12px 0;
+        }
+
+        .section-content li {
+            font-size: 14px;
+            color: var(--text-secondary);
+            padding-left: 24px;
+            position: relative;
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        .section-content li::before {
+            content: "▹";
+            position: absolute;
+            left: 0;
+            color: var(--accent-cyan);
+            font-size: 14px;
+        }
+
+        .highlight-box {
+            background: rgba(123, 92, 255, 0.08);
+            border: 1px solid rgba(123, 92, 255, 0.25);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .highlight-box p {
+            margin: 0;
+            font-size: 13px;
+            color: #c4b5fd;
+        }
+
+        .warning-box {
+            background: rgba(251, 146, 60, 0.08);
+            border: 1px solid rgba(251, 146, 60, 0.25);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .warning-box p {
+            margin: 0;
+            font-size: 13px;
+            color: #fdba74;
+        }
+
+        code {
+            font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+                Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            background: rgba(15, 23, 42, 0.85);
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #e5e7eb;
+        }
+
+        a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a:hover {
+            color: #fff;
+            text-decoration: underline;
+        }
+
+        .contact-card {
+            background: radial-gradient(circle at top left, #1c153f 0, #050816 55%);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(55, 65, 81, 0.85);
+            margin-top: 24px;
+        }
+
+        .contact-card h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: var(--accent-cyan);
+        }
+
+        .contact-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        /* Mobile tweaks */
+        @media (max-width: 768px) {
+            body {
+                padding: 18px 10px 32px;
+            }
+
+            .content-panel {
+                padding: 24px 18px;
+            }
+
+            .page-title {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="shell">
+        <!-- Header -->
+        <header class="page-header">
+            <div class="page-badge">🔒 Legal Document</div>
+            <h1 class="page-title">Privacy Policy</h1>
+            <p class="page-subtitle">
+                How Chaos Kitten handles your data, security, and privacy
+            </p>
+            <span class="last-updated">Last updated: March 4, 2026</span>
+        </header>
+
+        <!-- Main content -->
+        <div class="content-panel">
+            <!-- Introduction -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">📋</span>
+                    Introduction
+                </h2>
+                <div class="section-content">
+                    <p>
+                        Chaos Kitten is an open-source, agentic AI security testing tool designed to intelligently find
+                        vulnerabilities in APIs. This Privacy Policy explains how the tool operates, what data it
+                        processes, and your rights when using it.
+                    </p>
+                    <p>
+                        <strong>Important:</strong> Chaos Kitten is a locally-run security testing tool. It does not
+                        collect, store, or transmit your personal data to any external servers operated by the project
+                        maintainers.
+                    </p>
+                </div>
+            </div>
+
+            <!-- What is Chaos Kitten -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🐱</span>
+                    What is Chaos Kitten?
+                </h2>
+                <div class="section-content">
+                    <p>
+                        Chaos Kitten is an AI-powered security scanner that:
+                    </p>
+                    <ul>
+                        <li>Parses OpenAPI specifications to understand your API structure</li>
+                        <li>Intelligently generates attack payloads using LLM models (Anthropic Claude or OpenAI GPT)
+                        </li>
+                        <li>Tests for vulnerabilities including SQL injection, XSS, authentication flaws, and more</li>
+                        <li>Provides detailed security reports in multiple formats (HTML, JSON, SARIF, JUnit)</li>
+                        <li>Runs locally on your machine or in your CI/CD pipeline</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Data Processing -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🔍</span>
+                    Data Processing
+                </h2>
+                <div class="section-content">
+                    <p>
+                        When you run Chaos Kitten, the following data is processed:
+                    </p>
+
+                    <h3 style="font-size: 15px; margin: 16px 0 8px; color: var(--text-primary);">Local Data Processing
+                    </h3>
+                    <ul>
+                        <li><strong>API specifications:</strong> Your OpenAPI/Swagger files are read locally to map
+                            endpoints</li>
+                        <li><strong>API responses:</strong> HTTP responses from your target API are analyzed for
+                            vulnerabilities</li>
+                        <li><strong>Configuration files:</strong> Settings from <code>chaos-kitten.yaml</code> and
+                            <code>.env</code> files
+                        </li>
+                        <li><strong>Authentication credentials:</strong> API keys, tokens, or TOTP secrets you configure
+                            (stored locally only)</li>
+                        <li><strong>Scan results:</strong> Generated reports are saved to your local filesystem</li>
+                    </ul>
+
+                    <h3 style="font-size: 15px; margin: 16px 0 8px; color: var(--text-primary);">Third-Party LLM API
+                        Usage</h3>
+                    <p>
+                        Chaos Kitten sends the following data to your configured LLM provider (Anthropic or OpenAI):
+                    </p>
+                    <ul>
+                        <li>API endpoint structures and parameter schemas</li>
+                        <li>Sample request/response data for vulnerability analysis</li>
+                        <li>Context needed to generate intelligent attack payloads</li>
+                    </ul>
+
+                    <div class="warning-box">
+                        <p>
+                            <strong>⚠️ Important:</strong> Sensitive data from your API responses may be sent to
+                            third-party LLM providers. Review their privacy policies:
+                            <br><br>
+                            • <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">Anthropic Privacy Policy</a>
+                            <br>
+                            • <a href="https://openai.com/privacy/" target="_blank" rel="noopener noreferrer">OpenAI Privacy Policy</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data We Don't Collect -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🚫</span>
+                    Data We Don't Collect
+                </h2>
+                <div class="section-content">
+                    <p>
+                        The Chaos Kitten project maintainers do <strong>NOT</strong> collect:
+                    </p>
+                    <ul>
+                        <li>Personal information (name, email, location)</li>
+                        <li>Your API endpoints or target URLs</li>
+                        <li>Scan results or vulnerability findings</li>
+                        <li>Authentication credentials or API keys</li>
+                        <li>Usage analytics or telemetry data</li>
+                        <li>Logs of your security testing activities</li>
+                    </ul>
+
+                    <div class="highlight-box">
+                        <p>
+                            <strong>✓ Privacy-First Design:</strong> Chaos Kitten operates entirely on your
+                            infrastructure. All data stays within your control unless you explicitly configure external
+                            integrations.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cookies & Tracking -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🍪</span>
+                    Cookies & Tracking
+                </h2>
+                <div class="section-content">
+                    <p>
+                        Chaos Kitten does not use cookies or tracking technologies. Since it runs locally on your
+                        machine:
+                    </p>
+                    <ul>
+                        <li>No cookies are set by the tool itself</li>
+                        <li>No analytics or tracking pixels are used</li>
+                        <li>No third-party trackers are embedded</li>
+                        <li>Browser local storage is not used for data collection</li>
+                    </ul>
+                    <p>
+                        When you access web-based documentation or GitHub repositories, their cookie policies apply.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Third-Party Services -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🔗</span>
+                    Third-Party Services
+                </h2>
+                <div class="section-content">
+                    <p>
+                        Chaos Kitten integrates with the following third-party services based on your configuration:
+                    </p>
+
+                    <h3 style="font-size: 15px; margin: 16px 0 8px; color: var(--text-primary);">1. LLM Providers
+                        (Required)</h3>
+                    <ul>
+                        <li><strong>Anthropic Claude</strong> or <strong>OpenAI GPT</strong> – Used for intelligent
+                            attack generation</li>
+                        <li>Your API key is sent directly to their APIs</li>
+                        <li>Subject to their respective privacy policies and data retention</li>
+                    </ul>
+
+                    <h3 style="font-size: 15px; margin: 16px 0 8px; color: var(--text-primary);">2. Browser Automation
+                        (Optional)</h3>
+                    <ul>
+                        <li><strong>Playwright/Chromium</strong> – Optional for XSS exploit validation</li>
+                        <li>Runs locally in isolated browser contexts</li>
+                        <li>No data is sent to external Playwright servers</li>
+                    </ul>
+
+                    <h3 style="font-size: 15px; margin: 16px 0 8px; color: var(--text-primary);">3. CI/CD Platforms
+                        (Optional)</h3>
+                    <ul>
+                        <li><strong>GitHub Actions</strong>, <strong>GitLab CI</strong> – For automated security
+                            scanning</li>
+                        <li>Scan results may be stored in your CI/CD artifacts</li>
+                        <li>Subject to your CI/CD provider's privacy policies</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Your Responsibilities -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">⚖️</span>
+                    Your Responsibilities
+                </h2>
+                <div class="section-content">
+                    <p>
+                        When using Chaos Kitten, you are responsible for:
+                    </p>
+                    <ul>
+                        <li><strong>Legal compliance:</strong> Only test APIs you own or have explicit permission to
+                            test</li>
+                        <li><strong>Data protection:</strong> Ensure compliance with GDPR, CCPA, and other data
+                            protection laws</li>
+                        <li><strong>Sensitive data:</strong> Avoid testing production APIs with real user data without
+                            proper safeguards</li>
+                        <li><strong>API key security:</strong> Protect your LLM API keys and authentication credentials
+                        </li>
+                        <li><strong>Report handling:</strong> Securely store and control access to generated
+                            vulnerability reports</li>
+                    </ul>
+
+                    <div class="warning-box">
+                        <p>
+                            <strong>⚠️ Legal Warning:</strong> Unauthorized security testing may violate computer fraud
+                            laws. Always obtain proper authorization before testing any API.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Open Source Transparency -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🌐</span>
+                    Open Source Transparency
+                </h2>
+                <div class="section-content">
+                    <p>
+                        Chaos Kitten is fully open source. You can:
+                    </p>
+                    <ul>
+                        <li>Review the complete source code on <a href="https://github.com/mdhaarishussain/chaos-kitten"
+                                target="_blank" rel="noopener noreferrer">GitHub</a></li>
+                        <li>Audit how data is processed and transmitted</li>
+                        <li>Self-host and modify the tool for your needs</li>
+                        <li>Contribute improvements or security fixes</li>
+                    </ul>
+                    <p>
+                        This transparency ensures you have full visibility into how your data is handled.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Data Retention -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🗄️</span>
+                    Data Retention
+                </h2>
+                <div class="section-content">
+                    <p>
+                        <strong>Local data:</strong> All scan results, logs, and configuration files remain on your
+                        system. You control retention and deletion.
+                    </p>
+                    <p>
+                        <strong>LLM provider data:</strong> Anthropic and OpenAI have their own data retention policies.
+                        Refer to their documentation for details on how long they retain API request data.
+                    </p>
+                    <p>
+                        <strong>Project maintainers:</strong> We do not retain any of your data since we don't collect
+                        it.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Security -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">🔐</span>
+                    Security
+                </h2>
+                <div class="section-content">
+                    <p>
+                        We take security seriously:
+                    </p>
+                    <ul>
+                        <li>Chaos Kitten runs with the permissions of your user account</li>
+                        <li>API keys should be stored in <code>.env</code> files (never committed to version control)
+                        </li>
+                        <li>Docker isolation is available to sandbox the scanner environment</li>
+                        <li>Vulnerability reports may contain sensitive findings – secure them appropriately</li>
+                    </ul>
+                    <p>
+                        If you discover a security issue in Chaos Kitten itself, please report it via <a
+                            href="https://github.com/mdhaarishussain/chaos-kitten/security" target="_blank" rel="noopener noreferrer">GitHub
+                            Security Advisories</a>.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Changes to This Policy -->
+            <div class="section">
+                <h2 class="section-title">
+                    <span class="icon">📝</span>
+                    Changes to This Policy
+                </h2>
+                <div class="section-content">
+                    <p>
+                        We may update this Privacy Policy from time to time. Changes will be posted on:
+                    </p>
+                    <ul>
+                        <li>This page (with updated "Last updated" date)</li>
+                        <li>The <a href="https://github.com/mdhaarishussain/chaos-kitten" target="_blank" rel="noopener noreferrer">GitHub
+                                repository</a></li>
+                    </ul>
+                    <p>
+                        Continued use of Chaos Kitten after updates constitutes acceptance of the revised policy.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Contact -->
+            <div class="contact-card">
+                <h3>Questions or Concerns?</h3>
+                <p>
+                    If you have questions about this Privacy Policy or how Chaos Kitten handles data, please:
+                </p>
+                <p>
+                    • Open an issue on <a href="https://github.com/mdhaarishussain/chaos-kitten/issues"
+                        target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+                    <br>
+                    • Join the discussion on <a href="https://github.com/mdhaarishussain/chaos-kitten/discussions"
+                        target="_blank" rel="noopener noreferrer">GitHub Discussions</a>
+                    <br>
+                    • Contact the maintainer: <a href="https://github.com/mdhaarishussain"
+                        target="_blank" rel="noopener noreferrer">@mdhaarishussain</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

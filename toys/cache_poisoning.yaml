@@ -1,0 +1,29 @@
+# Cache Poisoning Attack Profile
+name: "Cache Poisoning"
+category: "cache_poisoning"
+severity: "high"
+description: "Tests for cache poisoning vulnerabilities by injecting cache-related headers and observing responses."
+
+target_fields:
+  - "*" # Targets headers mainly, but can be applied to any endpoint
+
+payloads:
+  - "X-Forwarded-Host: evil.com"
+  - "X-Host: evil.com"
+  - "X-Forwarded-Server: evil.com"
+  - "X-Original-URL: /malicious"
+  - "X-Rewrite-URL: /malicious"
+  - "X-Custom-IP-Authorization: 127.0.0.1"
+
+success_indicators:
+  headers:
+    - "X-Cache: HIT"
+    - "CF-Cache-Status: HIT"
+    - "Age" # Presence of Age header implies caching
+  response_contains:
+    - "evil.com"
+    - "/malicious"
+
+remediation: "Configure the cache key to include all headers that influence the response."
+references:
+  - "https://portswigger.net/web-security/web-cache-poisoning"

