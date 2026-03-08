@@ -1,0 +1,1634 @@
+============================= test session starts =============================
+platform win32 -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0 -- C:\Users\Vedha\AppData\Local\Programs\Python\Python38\python.exe
+cachedir: .pytest_cache
+rootdir: D:\opensource\chaos-kitten
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.24.0, cov-5.0.0, respx-0.22.0
+asyncio: mode=auto, default_loop_scope=None
+collecting ... collected 12 items
+
+tests/test_spec_differ.py::test_spec_differ_empty_specs FAILED           [  8%]
+tests/test_spec_differ.py::test_spec_differ_identical_specs FAILED       [ 16%]
+tests/test_spec_differ.py::test_spec_differ_added_endpoints FAILED       [ 25%]
+tests/test_spec_differ.py::test_spec_differ_removed_endpoints FAILED     [ 33%]
+tests/test_spec_differ.py::test_spec_differ_parameter_changes FAILED     [ 41%]
+tests/test_spec_differ.py::test_spec_differ_auth_removal_critical FAILED [ 50%]
+tests/test_spec_differ.py::test_spec_differ_request_body_changes FAILED  [ 58%]
+tests/test_spec_differ.py::test_spec_differ_response_code_changes FAILED [ 66%]
+tests/test_spec_differ.py::test_spec_differ_get_delta_endpoints FAILED   [ 75%]
+tests/test_spec_differ.py::test_spec_differ_multiple_http_methods FAILED [ 83%]
+tests/test_spec_differ.py::test_spec_differ_complex_scenario FAILED      [ 91%]
+tests/test_spec_differ.py::test_spec_differ_parameter_type_change FAILED [100%]
+
+================================== FAILURES ===================================
+________________________ test_spec_differ_empty_specs _________________________
+
+    def test_spec_differ_empty_specs():
+        """Test diff with empty specs."""
+        old_spec = {"paths": {}}
+        new_spec = {"paths": {}}
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:13: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB53B250>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+______________________ test_spec_differ_identical_specs _______________________
+
+    def test_spec_differ_identical_specs():
+        """Test diff with identical specs (no changes)."""
+        spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "List users",
+                        "parameters": [],
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(spec, spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB673A90>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+______________________ test_spec_differ_added_endpoints _______________________
+
+    def test_spec_differ_added_endpoints():
+        """Test detection of newly added endpoints."""
+        old_spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "List users",
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "List users",
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                },
+                "/orders": {
+                    "post": {
+                        "summary": "Create order",
+                        "responses": {"201": {"description": "Created"}}
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB6CC3A0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+_____________________ test_spec_differ_removed_endpoints ______________________
+
+    def test_spec_differ_removed_endpoints():
+        """Test detection of removed endpoints."""
+        old_spec = {
+            "paths": {
+                "/users": {"get": {"summary": "List users"}},
+                "/admin": {"delete": {"summary": "Admin endpoint"}}
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users": {"get": {"summary": "List users"}}
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB6732E0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+_____________________ test_spec_differ_parameter_changes ______________________
+
+    def test_spec_differ_parameter_changes():
+        """Test detection of parameter modifications."""
+        old_spec = {
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}}
+                        ]
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {"name": "id", "in": "path", "required": True, "schema": {"type": "integer"}},
+                            {"name": "include_deleted", "in": "query", "schema": {"type": "boolean"}}
+                        ]
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB6BEC40>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+___________________ test_spec_differ_auth_removal_critical ____________________
+
+    def test_spec_differ_auth_removal_critical():
+        """Test CRITICAL detection when authentication is removed."""
+        old_spec = {
+            "paths": {
+                "/admin": {
+                    "get": {
+                        "summary": "Admin panel",
+                        "security": [{"bearerAuth": []}],
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/admin": {
+                    "get": {
+                        "summary": "Admin panel",
+                        "security": [],  # Auth removed!
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB6C5AF0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+____________________ test_spec_differ_request_body_changes ____________________
+
+    def test_spec_differ_request_body_changes():
+        """Test detection of request body schema changes."""
+        old_spec = {
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "properties": {
+                                            "name": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "properties": {
+                                            "name": {"type": "string"},
+                                            "role": {"type": "string"}  # New field
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB5A5B20>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+___________________ test_spec_differ_response_code_changes ____________________
+
+    def test_spec_differ_response_code_changes():
+        """Test detection of response code changes."""
+        old_spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {
+                            "200": {"description": "Success"},
+                            "404": {"description": "Not found"}
+                        }
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {
+                            "200": {"description": "Success"},
+                            "403": {"description": "Forbidden"}  # Changed
+                        }
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:272: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB5C14F0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+____________________ test_spec_differ_get_delta_endpoints _____________________
+
+    def test_spec_differ_get_delta_endpoints():
+        """Test retrieval of endpoints needing testing (added + modified)."""
+        old_spec = {
+            "paths": {
+                "/users": {
+                    "get": {"summary": "List users", "security": [{"bearerAuth": []}]}
+                },
+                "/old-api": {
+                    "get": {"summary": "Old endpoint"}
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users": {
+                    "get": {"summary": "List users", "security": []}  # Modified (auth removed)
+                },
+                "/new-api": {
+                    "post": {"summary": "New endpoint"}  # Added
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       delta_endpoints = differ.get_delta_endpoints()
+
+tests\test_spec_differ.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+chaos_kitten\brain\spec_differ.py:278: in get_delta_endpoints
+    self.compute_diff()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB60D970>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+___________________ test_spec_differ_multiple_http_methods ____________________
+
+    def test_spec_differ_multiple_http_methods():
+        """Test diff handles multiple HTTP methods on same path."""
+        old_spec = {
+            "paths": {
+                "/items": {
+                    "get": {"summary": "List items"},
+                    "post": {"summary": "Create item"}
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/items": {
+                    "get": {"summary": "List items"},
+                    "post": {"summary": "Create item"},
+                    "delete": {"summary": "Delete all items"}  # Added method
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:336: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB69EF70>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+______________________ test_spec_differ_complex_scenario ______________________
+
+    def test_spec_differ_complex_scenario():
+        """Test complex scenario with multiple types of changes."""
+        old_spec = {
+            "security": [{"apiKey": []}],
+            "paths": {
+                "/users": {
+                    "get": {
+                        "security": [{"apiKey": []}],
+                        "parameters": [{"name": "limit", "in": "query"}]
+                    }
+                },
+                "/admin": {
+                    "get": {"security": [{"bearerAuth": []}]}
+                },
+                "/deprecated": {
+                    "get": {"summary": "Old endpoint"}
+                }
+            }
+        }
+    
+        new_spec = {
+            "security": [{"apiKey": []}],
+            "paths": {
+                "/users": {
+                    "get": {
+                        "security": [{"apiKey": []}],
+                        "parameters": [
+                            {"name": "limit", "in": "query"},
+                            {"name": "offset", "in": "query"}  # New param
+                        ]
+                    }
+                },
+                "/admin": {
+                    "get": {"security": []}  # Auth removed - CRITICAL!
+                },
+                "/v2/payments": {
+                    "post": {"summary": "New payment endpoint"}  # New endpoint
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB6B7CA0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+___________________ test_spec_differ_parameter_type_change ____________________
+
+    def test_spec_differ_parameter_type_change():
+        """Test detection when parameter type changes."""
+        old_spec = {
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {"name": "id", "in": "path", "schema": {"type": "string"}}
+                        ]
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {"name": "id", "in": "path", "schema": {"type": "integer"}}  # Type changed
+                        ]
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+>       result = differ.compute_diff()
+
+tests\test_spec_differ.py:429: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chaos_kitten.brain.spec_differ.SpecDiffer object at 0x00000210DB5A7FD0>
+
+    def compute_diff(self) -> Dict[str, Any]:
+        """Compute structural diff between specs.
+    
+        Returns:
+            Dict with added, removed, modified endpoints and summary stats
+        """
+        old_endpoints = self._extract_endpoints(self.old_spec)
+        new_endpoints = self._extract_endpoints(self.new_spec)
+    
+        # Create endpoint keys: (method, path)
+        old_keys = {(ep["method"], ep["path"]): ep for ep in old_endpoints}
+        new_keys = {(ep["method"], ep["path"]): ep for ep in new_endpoints}
+    
+        added = []
+        removed = []
+        modified = []
+        critical_findings = []
+    
+        # Find added endpoints
+        for key in new_keys.keys() - old_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="added",
+                method=method,
+                path=path,
+                new_endpoint=new_keys[key],
+                severity="info",
+                reason="New endpoint added to API"
+            )
+            added.append(change)
+            self.changes.append(change)
+    
+        # Find removed endpoints
+        for key in old_keys.keys() - new_keys.keys():
+            method, path = key
+            change = EndpointChange(
+                change_type="removed",
+                method=method,
+                path=path,
+                old_endpoint=old_keys[key],
+                severity="medium",
+                reason="Endpoint removed from API"
+            )
+            removed.append(change)
+            self.changes.append(change)
+    
+        # Find modified endpoints
+        for key in old_keys.keys() & new_keys.keys():
+            method, path = key
+            old_ep = old_keys[key]
+            new_ep = new_keys[key]
+    
+            modifications = self._detect_modifications(old_ep, new_ep)
+    
+            if modifications:
+                # Check for auth removal (CRITICAL) ? use ranking to prevent downgrade
+                _SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+                current_rank = _SEVERITY_RANK["info"]
+                reason = "Endpoint modified"
+    
+                for mod in modifications:
+                    if "authentication removed" in mod.lower() or "security requirement removed" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["critical"])
+                        reason = "Authentication requirement removed ? potential security regression"
+                        break
+                    elif "parameter" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["medium"])
+                        if current_rank == _SEVERITY_RANK["medium"]:
+                            reason = "Parameters modified"
+                    elif "response" in mod.lower():
+                        current_rank = max(current_rank, _SEVERITY_RANK["low"])
+    
+                # Invert back to name
+                severity = next(k for k, v in _SEVERITY_RANK.items() if v == current_rank)
+    
+                change = EndpointChange(
+                    change_type="modified",
+                    method=method,
+                    path=path,
+                    old_endpoint=old_ep,
+                    new_endpoint=new_ep,
+                    modifications=modifications,
+                    severity=severity,
+                    reason=reason
+                )
+                modified.append(change)
+                self.changes.append(change)
+    
+                if severity == "critical":
+                    critical_findings.append(change)
+    
+>       unchanged_count = len(old_keys & new_keys) - len(modified)
+E       TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+
+chaos_kitten\brain\spec_differ.py:126: TypeError
+
+---------- coverage: platform win32, python 3.8.10-final-0 -----------
+Name                                           Stmts   Miss  Cover   Missing
+----------------------------------------------------------------------------
+chaos_kitten\__init__.py                           5      0   100%
+chaos_kitten\brain\__init__.py                     5      0   100%
+chaos_kitten\brain\adaptive_planner.py            33     33     0%   3-95
+chaos_kitten\brain\attack_chainer.py             118    118     0%   3-244
+chaos_kitten\brain\attack_planner.py             376    323    14%   81-88, 91-107, 113-186, 198-254, 259-329, 332-471, 474-506, 509-534, 537-539, 544, 547-554, 557-558, 561-565, 568-573, 576-581, 584-587, 591-604, 608-618, 680-682, 686-710, 726-786, 803-826
+chaos_kitten\brain\chaos_engine.py               300    300     0%   9-1123
+chaos_kitten\brain\cors.py                        15     13    13%   4-33
+chaos_kitten\brain\graphql_parser.py             118     95    19%   19, 128-136, 144-171, 179-226, 230-234, 238-246, 250-257, 260-281, 285-297, 301-328
+chaos_kitten\brain\openapi_parser.py             153    137    10%   54-57, 75-116, 120-121, 125-126, 138-184, 203-266, 279-298, 309-357, 369-400
+chaos_kitten\brain\orchestrator.py               269    227    16%   17-22, 65-84, 90-113, 119-143, 149-177, 182-344, 349, 356-360, 364-501, 505-530
+chaos_kitten\brain\recon.py                      143    127    11%   35-42, 51-109, 115-150, 156-193, 199-236
+chaos_kitten\brain\response_analyzer.py          100    100     0%   2-295
+chaos_kitten\brain\spec_differ.py                136     16    88%   97-99, 124, 128, 211, 221, 223, 234, 280-293
+chaos_kitten\cli.py                              239    208    13%   38, 44-93, 179-272, 323-387, 393-475, 481-485, 490-491, 504-546, 550
+chaos_kitten\litterbox\__init__.py                 2      0   100%
+chaos_kitten\litterbox\reporter.py               217    191    12%   50-57, 74-120, 124-131, 135-159, 177-186, 206-273, 286-296, 319-348, 364-399, 415-464, 476-498, 510-514, 526-603, 607-613, 625-678
+chaos_kitten\litterbox\themes.py                  33     24    27%   109-155
+chaos_kitten\paws\__init__.py                      4      0   100%
+chaos_kitten\paws\analyzer.py                    141    109    23%   37-38, 42-96, 100-116, 130-194, 204-255, 259-298, 302-309, 316, 321, 325-331
+chaos_kitten\paws\browser.py                     165    146    12%   23-33, 56-62, 66-87, 93-101, 105-110, 139-168, 177-184, 209-284, 295-315, 326-353
+chaos_kitten\paws\executor.py                    218    192    12%   66-100, 104-114, 118-125, 129-136, 160-330, 334-358, 369-383, 387-401, 405-444, 452-469, 476-510
+chaos_kitten\toys_cli.py                         173    143    17%   36-38, 47-66, 71-74, 82-122, 130-214, 219-236, 243-255
+chaos_kitten\utils\__init__.py                     2      0   100%
+chaos_kitten\utils\checkpoint.py                  44     27    39%   22-23, 32-44, 55-64, 72-74
+chaos_kitten\utils\config.py                      81     54    33%   18-19, 24, 36-57, 61-70, 74-100, 105, 110-113, 118, 123, 128, 133, 138, 143
+chaos_kitten\validators\__init__.py                2      0   100%
+chaos_kitten\validators\profile_validator.py     104     86    17%   26-126, 129-143
+----------------------------------------------------------------------------
+TOTAL                                           3196   2669    16%
+
+=========================== short test summary info ===========================
+FAILED tests/test_spec_differ.py::test_spec_differ_empty_specs - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_identical_specs - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_added_endpoints - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_removed_endpoints - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_parameter_changes - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_auth_removal_critical - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_request_body_changes - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_response_code_changes - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_get_delta_endpoints - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_multiple_http_methods - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_complex_scenario - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+FAILED tests/test_spec_differ.py::test_spec_differ_parameter_type_change - TypeError: unsupported operand type(s) for &: 'dict' and 'dict'
+============================= 12 failed in 1.75s ==============================

@@ -1,0 +1,659 @@
+============================= test session starts =============================
+platform win32 -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0 -- C:\Users\Vedha\AppData\Local\Programs\Python\Python38\python.exe
+cachedir: .pytest_cache
+rootdir: D:\opensource\chaos-kitten
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.24.0, cov-5.0.0, respx-0.22.0
+asyncio: mode=auto, default_loop_scope=None
+collecting ... collected 293 items / 1 error
+
+<Dir chaos-kitten>
+  <Package tests>
+    <Module test_adaptive_generation.py>
+      Tests for adaptive payload generation.
+      <Coroutine test_generate_payloads_success>
+      <Coroutine test_generate_payloads_error_handling>
+      <Coroutine test_orchestrator_adaptive_integration>
+      <Coroutine test_orchestrator_adaptive_max_rounds>
+    <Module test_attack_chainer.py>
+      Tests for attack_chainer.py.
+      <Function test_endpoint_graph>
+      <Coroutine test_attack_chain_planner>
+      <Coroutine test_attack_chain_planner_error>
+      <Coroutine test_chain_executor>
+    <Module test_attack_planner.py>
+      <Function test_load_attack_profiles_valid>
+        Test loading a valid attack profile.
+      <Function test_parse_profile_structure>
+        Test that all fields are correctly parsed into the AttackProfile object.
+      <Function test_filter_by_severity>
+        Test that we can filter loaded profiles by severity.
+      <Function test_filter_by_category>
+        Test that we can filter loaded profiles by category.
+      <Function test_filter_by_target_field>
+        Test that plan_attacks filters profiles based on target fields (rule-based).
+      <Function test_handle_missing_files>
+        Test behavior when toys directory exists but no files match pattern.
+      <Function test_invalid_yaml>
+        Test handling of invalid YAML files.
+      <Function test_incomplete_profile_validation>
+        Test that profiles missing required fields are skipped.
+      <Function test_bad_types_validation>
+        Test validation of field types (payloads must be list).
+      <Function test_profile_endpoints_matching_negative>
+        Test that rule-based planning does NOT suggest irrelevant attacks.
+      <Function test_llm_init_providers>
+        Test LLM initialization for different providers.
+      <Function test_empty_profile_directory>
+        Test behavior when toys directory path itself does not exist or empty.
+      <Function test_plan_attacks_fallback_on_llm_failure>
+        Test that plan_attacks falls back to rule-based if LLM fails.
+      <Function test_llm_attack_generation_success>
+        Test successful generation of attacks via LLM.
+      <Function test_fuzzy_field_matching>
+        Test fuzzy matching logic in _field_matches_target.
+      <Function test_suggest_payloads>
+        Test suggest_payloads method.
+      <Function test_suggest_payloads_fallback>
+        Test suggest_payloads fallback when LLM fails.
+    <Module test_attack_planner_implementation.py>
+      <Function test_load_attack_profiles>
+        Test loading attack profiles from a directory.
+      <Function test_plan_attacks>
+        Test planning attacks for an endpoint.
+      <Function test_plan_attacks_fuzzy_match>
+        Test fuzzy matching for fields.
+      <Function test_plan_attacks_severity_sorting>
+        Test that attacks are sorted by severity.
+    <Module test_brain.py>
+      Tests for the Brain module.
+      <Class TestOrchestrator>
+        Tests for the Orchestrator.
+        <Coroutine test_orchestrator_run_flow>
+          Test that orchestrator initializes correctly and runs a scan.
+      <Class TestOpenAPIParser>
+        Tests for the OpenAPI parser.
+        <Function test_initialization>
+          Test parser initialization.
+        <Function test_file_not_found>
+          Test behavior when file does not exist.
+        <Function test_parse_invalid_json>
+          Test parsing a malformed JSON file.
+        <Function test_parse_unknown_version>
+          Test parsing a JSON file that is not OpenAPI/Swagger.
+        <Function test_parse_openapi_3_success>
+          Test successful parsing of OpenAPI 3 spec.
+        <Function test_parse_swagger_2_success>
+          Test successful parsing of Swagger 2.0 spec.
+        <Function test_get_endpoints_openapi_3>
+          Test endpoint extraction for OpenAPI 3.
+        <Function test_get_endpoints_swagger_2>
+          Test endpoint extraction and normalization for Swagger 2.
+        <Function test_swagger_formdata_normalization>
+          Test Swagger 2.0 formData parameters normalize to requestBody.
+        <Function test_filter_endpoints_by_method>
+          Test filtering endpoints by HTTP method.
+        <Function test_filter_endpoints_by_tags>
+          Test filtering endpoints by tags.
+        <Function test_get_servers_openapi_3>
+          Test server extraction for OpenAPI 3.
+        <Function test_get_servers_openapi_3_with_variables>
+          Test server variable substitution for OpenAPI 3.
+        <Function test_get_servers_swagger_2>
+          Test server extraction for Swagger 2.
+        <Function test_get_security_schemes>
+          Test security scheme extraction.
+        <Function test_real_world_example>
+          Integration test with the provided sample file.
+      <Class TestAttackPlanner>
+        Tests for the attack planner.
+        <Function test_load_attack_profiles>
+          Test loading attack profiles from toys/.
+        <Function test_plan_attacks_for_login_endpoint>
+          Test attack planning for a login endpoint.
+    <Module test_browser.py>
+      <Coroutine test_ctx_manager>
+        Test context manager entry and exit.
+      <Coroutine test_login_success>
+        Test login success flow.
+      <Coroutine test_get_session_state>
+        Test retrieving session state.
+      <Coroutine test_xss_detection>
+        Test XSS detection when alert dialog is triggered.
+    <Module test_business_logic.py>
+      <Coroutine test_concurrent_attack_execution>
+      <Coroutine test_workflow_attack_execution>
+    <Module test_cache_poisoning.py>
+      <Function test_cache_poisoning_header_reflection>
+        Test cache poisoning when injected header is reflected in response headers.
+      <Function test_cache_poisoning_body_reflection>
+        Test cache poisoning when injected header is reflected in response body.
+      <Function test_cache_poisoning_no_caching>
+        Test that cache poisoning is NOT reported if response is not cacheable.
+      <Function test_cache_poisoning_safe_vary>
+        Test safe case where Vary header handles the input.
+    <Module test_chaos_engine.py>
+      Tests for the Chaos Engine - negative testing engine.
+      <Class TestChaosInput>
+        <Function test_creation>
+        <Function test_to_dict>
+      <Class TestChaosGenerator>
+        <Function test_default_chaos_level>
+        <Function test_chaos_level_clamping_low>
+        <Function test_chaos_level_clamping_high>
+        <Function test_generate_int_chaos>
+        <Function test_generate_float_chaos>
+        <Function test_generate_string_chaos>
+        <Function test_generate_boolean_chaos>
+        <Function test_generate_array_chaos>
+        <Function test_generate_object_chaos>
+        <Function test_generate_unknown_type_falls_back_to_null>
+        <Function test_chaos_level_limits_output>
+        <Function test_missing_fields_payload>
+        <Function test_header_chaos>
+      <Class TestAnomalyDetector>
+        <Function test_set_baseline>
+        <Function test_set_baseline_empty>
+        <Function test_set_baseline_single_value>
+        <Function test_detect_server_error>
+        <Function test_detect_502_error>
+        <Function test_detect_response_time_outlier>
+        <Function test_detect_information_leak>
+        <Function test_no_anomaly_on_normal_response>
+        <Function test_detect_connection_error>
+        <Function test_detect_timing_leak_positive>
+        <Function test_detect_timing_leak_negative>
+      <Class TestChaosEngine>
+        <Function test_initialization>
+        <Function test_level_clamping>
+        <Function test_generate_chaos_payloads>
+        <Function test_generate_payloads_no_fields>
+        <Function test_get_summary_empty>
+        <Coroutine test_run_chaos_tests>
+        <Coroutine test_run_chaos_tests_custom_endpoints>
+        <Function test_get_summary_with_findings>
+      <Class TestAnomalyResult>
+        <Function test_to_dict>
+      <Class TestChaosEngineLiveExecutor>
+        Tests that verify ChaosEngine uses real HTTP path when an Executor is provided.
+        <Coroutine test_run_chaos_tests_with_executor>
+          Mock executor returns 200 OK ? no anomalies expected from normal response.
+        <Coroutine test_run_chaos_tests_executor_500>
+          Mock executor returns 500 ? a server_error anomaly should be detected.
+        <Coroutine test_run_chaos_tests_executor_connection_error>
+          Mock executor returns an error field ? connection_error anomaly expected.
+        <Coroutine test_run_chaos_tests_executor_overrides_init>
+          Executor passed to run_chaos_tests overrides the one from __init__.
+        <Coroutine test_run_chaos_tests_simulation_fallback>
+          No executor provided ? simulation path is used, execute_attack never called.
+        <Coroutine test_collect_live_baseline>
+          Baseline is collected from real executor responses, not hardcoded.
+        <Coroutine test_run_timing_tests>
+    <Module test_checkpoint.py>
+      Tests for checkpointing functionality.
+      <Function test_calculate_config_hash>
+      <Function test_save_and_load_checkpoint>
+      <Function test_load_nonexistent_checkpoint>
+      <Function test_load_corrupted_checkpoint>
+      <Function test_clean_checkpoint>
+      <Function test_clean_nonexistent_checkpoint>
+    <Module test_cicd_integration.py>
+      Tests for CI/CD Pipeline Integration Features.
+      <Class TestCicdIntegration>
+        Test suite for CI/CD integration features.
+        <Function test_fail_on_critical_flag>
+          Test that --fail-on critical exits with 1 when critical vuln found.
+        <Function test_fail_on_high_flag>
+          Test that --fail-on high exits with 1 when critical vuln found (critical > high).
+        <Function test_fail_on_threshold_not_met>
+          Test that --fail-on doesn't exit with 1 when threshold not met.
+        <Function test_silent_mode>
+          Test that --silent suppresses console output.
+        <Function test_junit_reporter_output>
+          Test JUnit XML report generation.
+    <Module test_config.py>
+      <Function test_valid_rest_config>
+      <Function test_valid_graphql_config>
+      <Function test_env_var_expansion>
+      <Function test_recursive_env_var_expansion>
+      <Function test_agent_default_max_concurrent_agents>
+      <Function test_non_dict_root_error>
+      <Function test_missing_target_error>
+      <Function test_missing_base_url_error>
+      <Function test_missing_graphql_fields_error>
+      <Function test_invalid_max_rounds_error>
+      <Function test_auth_default_totp_field>
+      <Function test_property_getters>
+      <Function test_empty_file_error>
+      <Function test_file_not_found_error>
+    <Module test_executor.py>
+      <Coroutine test_basic_get_request>
+        Test a simple GET request logic.
+      <Coroutine test_basic_post_request>
+        Test a simple POST request logic.
+      <Coroutine test_basic_put_request>
+        Test a simple PUT request logic.
+      <Coroutine test_basic_delete_request>
+        Test a simple DELETE request logic.
+      <Coroutine test_basic_patch_request>
+        Test a simple PATCH request logic.
+      <Coroutine test_auth_bearer>
+        Test Bearer token authentication.
+      <Coroutine test_auth_basic>
+        Test Basic authentication.
+      <Coroutine test_auth_none>
+        Test no authentication.
+      <Coroutine test_rate_limiting>
+        Test rate limiting logic.
+      <Coroutine test_timeout_handling>
+        Test request timeout handling.
+      <Coroutine test_connection_error>
+        Test connection error handling.
+      <Coroutine test_custom_headers>
+        Test adding custom headers.
+      <Coroutine test_request_body_encoding>
+        Test request body JSON encoding.
+      <Coroutine test_large_response>
+        Test handling of large response bodies.
+      <Coroutine test_concurrent_requests>
+        Test concurrent requests execution.
+      <Coroutine test_supported_auth_validation>
+        Test that invalid auth types raise ValueError.
+      <Coroutine test_client_not_initialized>
+        Test execution without context manager.
+      <Coroutine test_unsupported_method>
+        Test unsupported HTTP method (e.g. invalid string not handled by httpx/executor logic if extended).
+      <Coroutine test_unexpected_error>
+        Test unexpected error handling.
+      <Coroutine test_logging_enabled_logs_request_and_response>
+        Test that enabling logging captures request and response details.
+      <Coroutine test_logging_redacts_authorization_header>
+        Test that sensitive Authorization header is redacted in logs.
+      <Coroutine test_logging_redacts_api_key_in_query_params>
+        Test that API keys in query parameters are redacted.
+      <Coroutine test_logging_truncates_large_request_body>
+        Test that large request bodies are truncated in logs.
+      <Coroutine test_logging_full_body_for_errors>
+        Test that full response body is logged for errors.
+      <Coroutine test_logging_to_file>
+        Test that logs are written to file when log_file is specified.
+      <Coroutine test_logging_disabled_by_default>
+        Test that logging is disabled by default.
+      <Coroutine test_logging_includes_response_time>
+        Test that response logging includes elapsed time in milliseconds.
+    <Module test_executor_logging_fixes.py>
+      Tests to verify all 4 fixes from Review Round 2 for PR #98.
+      <Coroutine test_fix1_bare_key_not_redacted>
+        \u2705 FIX #1: Verify bare 'key' parameter is NOT redacted.
+        
+        The regex should only match api_key, api-key, apikey.
+        It should NOT match bare 'key=' parameters.
+      <Coroutine test_fix1_api_key_variations_redacted>
+        \u2705 FIX #1: Verify api_key variations ARE redacted.
+      <Coroutine test_fix2_url_fragment_handling>
+        \u2705 FIX #2: Verify URL fragments are handled correctly.
+        
+        The regex should stop at '#' characters to avoid including
+        fragments in the redaction match.
+      <Coroutine test_fix3_unique_logger_names>
+        \u2705 FIX #3: Verify each Executor instance has unique logger name.
+        
+        Logger names should include instance ID to avoid conflicts.
+      <Coroutine test_fix4_filehandler_cleanup>
+        \u2705 FIX #4: Verify FileHandler resources are properly cleaned up.
+        
+        Handlers should be closed and removed in __aexit__ to prevent
+        resource leaks.
+      <Coroutine test_all_fixes_integration>
+        Integration test verifying all 4 fixes work together.
+      <Coroutine test_regex_pattern_directly>
+        Direct test of the regex pattern to verify fixes #1 and #2.
+    <Module test_file_upload.py>
+      <Coroutine test_executor_file_upload>
+      <Function test_planner_detects_file_upload>
+      <Function test_planner_detects_file_upload_fuzzy_match>
+    <Module test_graphql_parser.py>
+      Tests for the GraphQL Parser.
+      <Class TestGraphQLParser>
+        Tests for GraphQLParser.
+        <Function test_introspect_success>
+          Test successful introspection from an endpoint.
+        <Function test_introspect_failure>
+          Test introspection failure handling.
+        <Function test_parse_schema_json>
+          Test parsing a local JSON schema file.
+        <Function test_to_endpoints>
+          Test conversion of schema to endpoint list.
+        <Function test_resolve_type_name>
+          Test type name resolution helper.
+    <Module test_integration.py>
+      End-to-End Integration Tests for Chaos Kitten.
+      <Coroutine test_full_scan_pipeline>
+        Test the full internal pipeline: Parse -> Plan -> Execute -> Analyze.
+      <Function test_openapi_discovery>
+        Verify endpoint discovery from sample OpenAPI spec.
+      <Coroutine test_sql_injection_detection>
+        Test SQL injection detection against the live demo API.
+      <Function test_report_generation>
+        Verify different report formats contain vulnerability data.
+      <Function test_cli_end_to_end>
+        Test CLI runs successfully against demo API.
+    <Module test_integration_scan.py>
+      <Function test_scan_demo_integration>
+        Test scan --demo command end-to-end.
+        
+        Requirements:
+        1. Use existing demo API/spec under examples/.
+        2. Verify non-zero exit on failure (handled by runner.invoke check).
+        3. Validate that a report file is created with expected metadata.
+    <Module test_litterbox.py>
+      Tests for the Litterbox module.
+      <Class TestReporter>
+        Tests for the report generator.
+        <Function test_initialization_defaults>
+          Test default parameter values.
+        <Function test_initialization_custom>
+          Test custom output path and format.
+        <Function test_output_directory_creation>
+          Test that output directory is created if it exists.
+        <Function test_html_report_generation>
+          Test HTML report generation.
+        <Function test_markdown_report_generation>
+          Test Markdown report generation.
+        <Function test_json_report_generation>
+          Test JSON report generation.
+        <Function test_sarif_report_generation>
+          Test SARIF report generation (and side-effect JSON).
+        <Function test_empty_results>
+          Test handling of empty scan results.
+        <Function test_validate_vulnerability_data>
+          Test data validation and default values.
+        <Function test_duplicate_ids>
+          Test handling of duplicate vulnerability IDs.
+        <Function test_poc_inclusion>
+          Verify PoC commands are included/excluded based on config.
+        <Function test_invalid_input_data>
+          Test that invalid input raises ValueError.
+        <Function test_default_theme_applied>
+          HTML report contains the default dark CSS variables when no theme_config is given.
+        <Function test_custom_theme_overrides>
+          Passing a custom dict overrides specific CSS variables.
+        <Function test_light_theme_preset>
+          The 'light' preset produces light palette variables.
+        <Function test_custom_logo_in_report>
+          A custom logo_url renders an <img> tag in the header.
+        <Function test_company_name_in_footer>
+          A custom company_name appears in the footer.
+        <Function test_dark_mode_toggle_present>
+          HTML report contains the theme toggle button and inline JS.
+    <Module test_natural_language_planner.py>
+      Tests for Natural Language Attack Planning.
+      <Function test_natural_language_planner_payment_goal>
+        Test NL planner identifies payment-related endpoints for price manipulation goal.
+      <Function test_natural_language_planner_fallback>
+        Test NL planner fallback when LLM fails.
+      <Function test_natural_language_planner_load_profiles>
+        Test loading available attack profiles.
+      <Function test_natural_language_planner_auth_goal>
+        Test NL planner for authentication testing goal.
+    <Module test_openapi_parser.py>
+      <Function test_parse_valid_openapi_3_0>
+        Test parsing a valid basic OpenAPI 3.0 specification.
+      <Function test_parse_openapi_3_1>
+        Test parsing an OpenAPI 3.1 specification.
+      <Function test_complex_path_parameters>
+        Test parsing of complex path parameters.
+      <Function test_required_vs_optional_params>
+        Test handling of required vs optional parameters.
+      <Function test_content_type_handling>
+        Test handling of different content types in request/response.
+      <Function test_authentication_schemes>
+        Test extraction of security schemes.
+      <Function test_response_handling>
+        Test parsing of response status codes and schemas.
+      <Function test_invalid_spec_missing_fields>
+        Test error handling for specs with missing required fields.
+      <Function test_invalid_spec_malformed_file>
+        Test error handling for malformed spec files.
+      <Function test_edge_case_empty_paths>
+        Test parsing a spec with no paths.
+      <Function test_file_not_found>
+        Test handling of non-existent files.
+      <Function test_real_world_spec>
+        Test parsing the sample OpenAPI spec from examples directory.
+      <Function test_respx_remote_ref>
+        Test resolving a remote $ref using respx.
+    <Module test_parallel_execution.py>
+      Tests for parallel execution of attack profiles.
+      <Coroutine test_parallel_category_execution_speed>
+        Test that different categories run in parallel.
+      <Coroutine test_sequential_category_execution_speed>
+        Test that max_concurrent_agents=1 enforces sequential execution.
+      <Coroutine test_findings_accumulation>
+        Test that findings from different concurrent tasks are collected correctly.
+    <Module test_paws.py>
+      Tests for the Paws module.
+      <Class TestExecutor>
+        Tests for the HTTP executor.
+        <Function test_initialization_defaults>
+          Test default values and url normalization.
+        <Function test_build_headers_bearer>
+          Test building headers with bearer auth.
+        <Function test_build_headers_basic>
+          Test building headers with basic auth.
+        <Function test_build_headers_no_auth>
+          Test building headers without authentication.
+        <Coroutine test_retry_on_429>
+          Test retry logic on 429 response.
+        <Coroutine test_retry_respects_retry_after>
+          Test respecting Retry-After header.
+        <Coroutine test_max_retries_exceeded>
+          Test max retries exhaustion.
+        <Coroutine test_execute_get_request>
+          Test executing a GET request with query parameters.
+        <Coroutine test_execute_post_request>
+          Test executing a POST request with JSON body.
+        <Coroutine test_execute_put_request>
+          Test executing a PUT request.
+        <Coroutine test_execute_patch_request>
+          Test executing a PATCH request.
+        <Coroutine test_execute_delete_request>
+          Test executing a DELETE request.
+        <Coroutine test_execute_without_context_manager>
+          Test that execute_attack fails gracefully without context manager.
+        <Coroutine test_unsupported_http_method>
+          Test handling of unsupported HTTP methods.
+        <Coroutine test_timeout_handling>
+          Test graceful handling of request timeouts.
+        <Coroutine test_connection_error_handling>
+          Test graceful handling of connection errors.
+        <Coroutine test_custom_headers>
+          Test merging custom headers with default headers.
+        <Coroutine test_rate_limiting>
+          Test that rate limiting is applied.
+        <Coroutine test_context_manager_cleanup>
+          Test that context manager properly cleans up resources.
+        <Coroutine test_mfa_success>
+          Test Case 1: Verify code is generated and POST request is sent.
+        <Coroutine test_mfa_custom_field>
+          Test Case 2: Verify custom totp_field ("otp") changes the JSON payload.
+        <Coroutine test_mfa_no_secret>
+          Test Case 3: Verify no MFA auth attempt if totp_secret is None.
+        <Coroutine test_mfa_auth_failure>
+          Test Case 4: Verify warnings logged but no crash on 401.
+        <Coroutine test_mfa_no_endpoint>
+          Test Case 5: Verify fast skip if secret is provided but no endpoint.
+      <Class TestBrowserExecutor>
+        Tests for the browser automation module.
+        <Function test_initialization>
+          Test default initialization.
+        <Function test_initialization_with_timeout>
+          Test initialization with custom timeout.
+        <Coroutine test_xss_detection_script_tag>
+          Test XSS detection with <script>alert()</script> payload.
+          
+          Note: <script> tags injected via innerHTML do NOT execute per HTML5 spec.
+          We use document.write() in the test page so that the <script> payload
+          actually runs and fires the dialog handler in BrowserExecutor.test_xss.
+        <Coroutine test_xss_detection_event_handler>
+          Test XSS detection with event handler (onerror) payload.
+        <Coroutine test_no_vulnerability_safe_input>
+          Test that safe input is not flagged as vulnerable.
+        <Coroutine test_context_manager_cleanup>
+          Test that browser resources are properly cleaned up.
+        <Coroutine test_error_handling_invalid_url>
+          Test error handling with invalid URL.
+        <Coroutine test_selector_not_found>
+          Test error handling when input selector doesn't exist.
+    <Module test_profile_validator.py>
+      <Class TestAttackProfileValidator>
+        <Function test_valid_profile>
+        <Function test_missing_required_field>
+        <Function test_invalid_severity>
+        <Function test_empty_payloads>
+        <Function test_malformed_payload>
+        <Function test_missing_success_indicators>
+        <Function test_invalid_success_indicators_type>
+        <Function test_file_not_found>
+        <Function test_invalid_yaml_syntax>
+        <Function test_unknown_category_warning>
+        <Function test_validate_all_profiles>
+        <Function test_cwe_format_warning>
+        <Function test_invalid_references_type>
+    <Module test_recon.py>
+      Tests for the Reconnaissance Engine.
+      <UnitTestCase TestReconEngine>
+        A class whose instances are single test cases.
+        
+        By default, the test code itself should be placed in a method named
+        'runTest'.
+        
+        If the fixture may be used for many test cases, create as
+        many test methods as are needed. When instantiating such a TestCase
+        subclass, specify in the constructor arguments the name of the test method
+        that the instance is to execute.
+        
+        Test authors should subclass TestCase for their own tests. Construction
+        and deconstruction of the test's environment ('fixture') can be
+        implemented by overriding the 'setUp' and 'tearDown' methods respectively.
+        
+        If it is necessary to override the __init__ method, the base class
+        __init__ method must always be called. It is important that subclasses
+        should not change the signature of their __init__ method, since instances
+        of the classes are instantiated automatically by parts of the framework
+        in order to be run.
+        
+        When subclassing TestCase, you can set these attributes:
+        * failureException: determines which exception will be raised when
+            the instance's assertion methods fail; test methods raising this
+            exception will be deemed to have 'failed' rather than 'errored'.
+        * longMessage: determines whether long messages (including repr of
+            objects used in assert methods) will be printed on failure in *addition*
+            to any explicit message passed.
+        * maxDiff: sets the maximum length of a diff in failure messages
+            by assert methods using difflib. It is looked up as an instance
+            attribute so can be configured by individual tests if required.
+        <TestCaseFunction test_enumerate_subdomains>
+        <TestCaseFunction test_fingerprint_tech>
+        <TestCaseFunction test_init_defaults>
+        <TestCaseFunction test_run_disabled>
+        <TestCaseFunction test_run_integration>
+        <TestCaseFunction test_scan_ports>
+    <Module test_response_analyzer.py>
+      <Function test_detect_sql_injection_mysql>
+      <Function test_detect_xss_reflection>
+      <Function test_detect_path_traversal_linux>
+      <Function test_no_vulnerability_found>
+      <Function test_timing_attack_detection>
+      <Function test_analyze_error_sqli>
+        Test detection of SQL Injection error messages.
+      <Function test_analyze_error_nosqli>
+        Test detection of NoSQL Injection error messages.
+      <Function test_analyze_error_command_injection>
+        Test detection of Command Injection error messages.
+      <Function test_analyze_error_xxe>
+        Test detection of XXE error messages.
+      <Function test_analyze_error_path_traversal>
+        Test detection of Path Traversal error messages.
+      <Function test_analyze_error_multiple_indicators>
+        Test confidence calculation/handling when multiple patterns match.
+      <Function test_analyze_error_no_match>
+        Test when no error patterns are found.
+      <Function test_analyze_error_non_string_body>
+        Test handling of non-string bodies (e.g. None or Dict/JSON object).
+    <Module test_sarif_reporter.py>
+      Tests for SARIF Report Generation.
+      <Class TestSarifReporter>
+        Tests for SARIF reporting capability.
+        <Function test_sarif_structure>
+          Test that SARIF output follows basic structure.
+        <Function test_sarif_schema_validation>
+          test that output validates against SARIF schema.
+        <Function test_map_severity>
+          Test severity mapping.
+    <Module test_secret_detection.py>
+      <Function test_detect_aws_access_key>
+      <Function test_detect_google_api_key>
+      <Function test_detect_private_key>
+      <Function test_detect_generic_api_key>
+      <Function test_no_secret>
+    <Module test_toys.py>
+      <Function test_cors_wildcard_origin>
+      <Function test_cors_credentials_exposure>
+    <Module test_toys_cli.py>
+      <Function test_toys_search_no_args>
+      <Function test_toys_search_with_keyword>
+      <Function test_toys_search_with_category>
+      <Function test_toys_list_empty>
+      <Function test_toys_list_with_files>
+      <Function test_toys_publish>
+      <Function test_toys_install_success>
+      <Function test_toys_install_allows_payload_content>
+
+=================================== ERRORS ====================================
+_________________ ERROR collecting tests/test_spec_differ.py __________________
+tests\test_spec_differ.py:4: in <module>
+    from chaos_kitten.brain.spec_differ import SpecDiffer, EndpointChange
+chaos_kitten\brain\spec_differ.py:8: in <module>
+    class EndpointChange:
+chaos_kitten\brain\spec_differ.py:14: in EndpointChange
+    old_endpoint: dict[str, Any] | None = None
+E   TypeError: 'type' object is not subscriptable
+
+---------- coverage: platform win32, python 3.8.10-final-0 -----------
+Name                                           Stmts   Miss  Cover   Missing
+----------------------------------------------------------------------------
+chaos_kitten\__init__.py                           5      0   100%
+chaos_kitten\brain\__init__.py                     5      0   100%
+chaos_kitten\brain\adaptive_planner.py            33     20    39%   12-14, 46-47, 65-95
+chaos_kitten\brain\attack_chainer.py             118     99    16%   18-20, 25-69, 73-80, 139, 143-164, 170, 174-244
+chaos_kitten\brain\attack_planner.py             376    323    14%   81-88, 91-107, 113-186, 198-254, 259-329, 332-471, 474-506, 509-534, 537-539, 544, 547-554, 557-558, 561-565, 568-573, 576-581, 584-587, 591-604, 608-618, 680-682, 686-710, 726-786, 803-826
+chaos_kitten\brain\chaos_engine.py               300    253    16%   17, 22-23, 38-41, 44, 66-73, 76, 104, 118-143, 147-161, 165-179, 183-223, 227-237, 241-259, 263-289, 293-298, 304-332, 346-364, 372-405, 412-414, 422-436, 460-527, 547, 568-585, 605-609, 629-699, 724-800, 812-831, 848-895, 905-965, 985-1070, 1074, 1112-1123
+chaos_kitten\brain\cors.py                        15     13    13%   4-33
+chaos_kitten\brain\graphql_parser.py             118     95    19%   19, 128-136, 144-171, 179-226, 230-234, 238-246, 250-257, 260-281, 285-297, 301-328
+chaos_kitten\brain\openapi_parser.py             153    137    10%   54-57, 75-116, 120-121, 125-126, 138-184, 203-266, 279-298, 309-357, 369-400
+chaos_kitten\brain\orchestrator.py               269    227    16%   17-22, 65-84, 90-113, 119-143, 149-177, 182-344, 349, 356-360, 364-501, 505-530
+chaos_kitten\brain\recon.py                      143    127    11%   35-42, 51-109, 115-150, 156-193, 199-236
+chaos_kitten\brain\response_analyzer.py          100     70    30%   29, 33, 116-180, 197-245, 253-273, 277-280, 286-288, 292-295
+chaos_kitten\brain\spec_differ.py                136    128     6%   15-293
+chaos_kitten\cli.py                              239    208    13%   38, 44-93, 179-272, 323-387, 393-475, 481-485, 490-491, 504-546, 550
+chaos_kitten\litterbox\__init__.py                 2      0   100%
+chaos_kitten\litterbox\reporter.py               217    191    12%   50-57, 74-120, 124-131, 135-159, 177-186, 206-273, 286-296, 319-348, 364-399, 415-464, 476-498, 510-514, 526-603, 607-613, 625-678
+chaos_kitten\litterbox\themes.py                  33     24    27%   109-155
+chaos_kitten\paws\__init__.py                      4      0   100%
+chaos_kitten\paws\analyzer.py                    141    109    23%   37-38, 42-96, 100-116, 130-194, 204-255, 259-298, 302-309, 316, 321, 325-331
+chaos_kitten\paws\browser.py                     165    146    12%   23-33, 56-62, 66-87, 93-101, 105-110, 139-168, 177-184, 209-284, 295-315, 326-353
+chaos_kitten\paws\executor.py                    218    192    12%   66-100, 104-114, 118-125, 129-136, 160-330, 334-358, 369-383, 387-401, 405-444, 452-469, 476-510
+chaos_kitten\toys_cli.py                         173    143    17%   36-38, 47-66, 71-74, 82-122, 130-214, 219-236, 243-255
+chaos_kitten\utils\__init__.py                     2      0   100%
+chaos_kitten\utils\checkpoint.py                  44     27    39%   22-23, 32-44, 55-64, 72-74
+chaos_kitten\utils\config.py                      81     54    33%   18-19, 24, 36-57, 61-70, 74-100, 105, 110-113, 118, 123, 128, 133, 138, 143
+chaos_kitten\validators\__init__.py                2      0   100%
+chaos_kitten\validators\profile_validator.py     104     86    17%   26-126, 129-143
+----------------------------------------------------------------------------
+TOTAL                                           3196   2672    16%
+
+=========================== short test summary info ===========================
+ERROR tests/test_spec_differ.py - TypeError: 'type' object is not subscriptable
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+==================== 293 tests collected, 1 error in 1.51s ====================

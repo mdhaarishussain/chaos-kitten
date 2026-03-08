@@ -1,0 +1,151 @@
+============================= test session starts =============================
+platform win32 -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0 -- C:\Users\Vedha\AppData\Local\Programs\Python\Python38\python.exe
+cachedir: .pytest_cache
+rootdir: D:\opensource\chaos-kitten
+configfile: pyproject.toml
+plugins: anyio-3.7.1, asyncio-0.24.0, cov-5.0.0, respx-0.22.0
+asyncio: mode=auto, default_loop_scope=None
+collecting ... collected 12 items
+
+tests/test_spec_differ.py::test_spec_differ_empty_specs PASSED           [  8%]
+tests/test_spec_differ.py::test_spec_differ_identical_specs PASSED       [ 16%]
+tests/test_spec_differ.py::test_spec_differ_added_endpoints PASSED       [ 25%]
+tests/test_spec_differ.py::test_spec_differ_removed_endpoints PASSED     [ 33%]
+tests/test_spec_differ.py::test_spec_differ_parameter_changes PASSED     [ 41%]
+tests/test_spec_differ.py::test_spec_differ_auth_removal_critical FAILED [ 50%]
+tests/test_spec_differ.py::test_spec_differ_request_body_changes PASSED  [ 58%]
+tests/test_spec_differ.py::test_spec_differ_response_code_changes PASSED [ 66%]
+tests/test_spec_differ.py::test_spec_differ_get_delta_endpoints PASSED   [ 75%]
+tests/test_spec_differ.py::test_spec_differ_multiple_http_methods PASSED [ 83%]
+tests/test_spec_differ.py::test_spec_differ_complex_scenario FAILED      [ 91%]
+tests/test_spec_differ.py::test_spec_differ_parameter_type_change PASSED [100%]
+
+================================== FAILURES ===================================
+___________________ test_spec_differ_auth_removal_critical ____________________
+
+    def test_spec_differ_auth_removal_critical():
+        """Test CRITICAL detection when authentication is removed."""
+        old_spec = {
+            "paths": {
+                "/admin": {
+                    "get": {
+                        "summary": "Admin panel",
+                        "security": [{"bearerAuth": []}],
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        new_spec = {
+            "paths": {
+                "/admin": {
+                    "get": {
+                        "summary": "Admin panel",
+                        "security": [],  # Auth removed!
+                        "responses": {"200": {"description": "Success"}}
+                    }
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+        result = differ.compute_diff()
+    
+        assert result["summary"]["modified_count"] == 1
+>       assert result["summary"]["critical_count"] == 1
+E       assert 0 == 1
+
+tests\test_spec_differ.py:184: AssertionError
+______________________ test_spec_differ_complex_scenario ______________________
+
+    def test_spec_differ_complex_scenario():
+        """Test complex scenario with multiple types of changes."""
+        old_spec = {
+            "security": [{"apiKey": []}],
+            "paths": {
+                "/users": {
+                    "get": {
+                        "security": [{"apiKey": []}],
+                        "parameters": [{"name": "limit", "in": "query"}]
+                    }
+                },
+                "/admin": {
+                    "get": {"security": [{"bearerAuth": []}]}
+                },
+                "/deprecated": {
+                    "get": {"summary": "Old endpoint"}
+                }
+            }
+        }
+    
+        new_spec = {
+            "security": [{"apiKey": []}],
+            "paths": {
+                "/users": {
+                    "get": {
+                        "security": [{"apiKey": []}],
+                        "parameters": [
+                            {"name": "limit", "in": "query"},
+                            {"name": "offset", "in": "query"}  # New param
+                        ]
+                    }
+                },
+                "/admin": {
+                    "get": {"security": []}  # Auth removed - CRITICAL!
+                },
+                "/v2/payments": {
+                    "post": {"summary": "New payment endpoint"}  # New endpoint
+                }
+            }
+        }
+    
+        differ = SpecDiffer(old_spec, new_spec)
+        result = differ.compute_diff()
+    
+        # Check summary
+        assert result["summary"]["added_count"] == 1  # /v2/payments
+        assert result["summary"]["removed_count"] == 1  # /deprecated
+        assert result["summary"]["modified_count"] == 2  # /users, /admin
+>       assert result["summary"]["critical_count"] == 1  # /admin auth removal
+E       assert 0 == 1
+
+tests\test_spec_differ.py:394: AssertionError
+
+---------- coverage: platform win32, python 3.8.10-final-0 -----------
+Name                                           Stmts   Miss  Cover   Missing
+----------------------------------------------------------------------------
+chaos_kitten\__init__.py                           5      0   100%
+chaos_kitten\brain\__init__.py                     5      0   100%
+chaos_kitten\brain\adaptive_planner.py            33     33     0%   3-95
+chaos_kitten\brain\attack_chainer.py             118    118     0%   3-244
+chaos_kitten\brain\attack_planner.py             376    323    14%   81-88, 91-107, 113-186, 198-254, 259-329, 332-471, 474-506, 509-534, 537-539, 544, 547-554, 557-558, 561-565, 568-573, 576-581, 584-587, 591-604, 608-618, 680-682, 686-710, 726-786, 803-826
+chaos_kitten\brain\chaos_engine.py               300    300     0%   9-1123
+chaos_kitten\brain\cors.py                        15     13    13%   4-33
+chaos_kitten\brain\graphql_parser.py             118     95    19%   19, 128-136, 144-171, 179-226, 230-234, 238-246, 250-257, 260-281, 285-297, 301-328
+chaos_kitten\brain\openapi_parser.py             153    137    10%   54-57, 75-116, 120-121, 125-126, 138-184, 203-266, 279-298, 309-357, 369-400
+chaos_kitten\brain\orchestrator.py               269    227    16%   17-22, 65-84, 90-113, 119-143, 149-177, 182-344, 349, 356-360, 364-501, 505-530
+chaos_kitten\brain\recon.py                      143    127    11%   35-42, 51-109, 115-150, 156-193, 199-236
+chaos_kitten\brain\response_analyzer.py          100    100     0%   2-295
+chaos_kitten\brain\spec_differ.py                136      8    94%   97-99, 124, 211, 221, 223, 234
+chaos_kitten\cli.py                              239    208    13%   38, 44-93, 179-272, 323-387, 393-475, 481-485, 490-491, 504-546, 550
+chaos_kitten\litterbox\__init__.py                 2      0   100%
+chaos_kitten\litterbox\reporter.py               217    191    12%   50-57, 74-120, 124-131, 135-159, 177-186, 206-273, 286-296, 319-348, 364-399, 415-464, 476-498, 510-514, 526-603, 607-613, 625-678
+chaos_kitten\litterbox\themes.py                  33     24    27%   109-155
+chaos_kitten\paws\__init__.py                      4      0   100%
+chaos_kitten\paws\analyzer.py                    141    109    23%   37-38, 42-96, 100-116, 130-194, 204-255, 259-298, 302-309, 316, 321, 325-331
+chaos_kitten\paws\browser.py                     165    146    12%   23-33, 56-62, 66-87, 93-101, 105-110, 139-168, 177-184, 209-284, 295-315, 326-353
+chaos_kitten\paws\executor.py                    218    192    12%   66-100, 104-114, 118-125, 129-136, 160-330, 334-358, 369-383, 387-401, 405-444, 452-469, 476-510
+chaos_kitten\toys_cli.py                         173    143    17%   36-38, 47-66, 71-74, 82-122, 130-214, 219-236, 243-255
+chaos_kitten\utils\__init__.py                     2      0   100%
+chaos_kitten\utils\checkpoint.py                  44     27    39%   22-23, 32-44, 55-64, 72-74
+chaos_kitten\utils\config.py                      81     54    33%   18-19, 24, 36-57, 61-70, 74-100, 105, 110-113, 118, 123, 128, 133, 138, 143
+chaos_kitten\validators\__init__.py                2      0   100%
+chaos_kitten\validators\profile_validator.py     104     86    17%   26-126, 129-143
+----------------------------------------------------------------------------
+TOTAL                                           3196   2661    17%
+
+=========================== short test summary info ===========================
+FAILED tests/test_spec_differ.py::test_spec_differ_auth_removal_critical - assert 0 == 1
+FAILED tests/test_spec_differ.py::test_spec_differ_complex_scenario - assert 0 == 1
+======================== 2 failed, 10 passed in 1.23s =========================

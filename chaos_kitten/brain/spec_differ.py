@@ -93,7 +93,8 @@ class SpecDiffer:
                 reason = "Endpoint modified"
 
                 for mod in modifications:
-                    if "authentication requirement removed" in mod.lower() or "security requirement removed" in mod.lower():
+                    mod_lower = mod.lower()
+                    if "authentication requirement removed" in mod_lower or "security requirement removed" in mod_lower or "🚨 critical" in mod_lower:
                         current_rank = max(current_rank, _SEVERITY_RANK["critical"])
                         reason = "Authentication requirement removed — potential security regression"
                         break
