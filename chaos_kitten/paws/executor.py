@@ -1,6 +1,9 @@
-"""HTTP Executor - Async HTTP client for executing attacks."""
+"""HTTP executor for sending payloads to endpoints."""
+
+from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -32,10 +35,10 @@ class Executor:
     
     def __init__(
         self,
-        base_url: str,
+        base_url: str = "",
         auth_type: str = "none",
-        auth_token: Optional[str] = None,
-        rate_limit: int = 10,
+        auth_token: str = "",
+        rate_limit: float = 0,
         timeout: int = 30,
         retry_config: Optional[Dict[str, Any]] = None,
         # New MFA fields
@@ -46,12 +49,12 @@ class Executor:
         log_file: Optional[str] = None,
     ) -> None:
         """Initialize the executor.
-        
+
         Args:
-            base_url: Base URL of the target API
-            auth_type: Authentication type (bearer, basic, none)
+            base_url: Base URL for the API
+            auth_type: Authentication type (none, bearer, basic, api_key)
             auth_token: Authentication token/credentials
-            rate_limit: Maximum requests per second
+            rate_limit: Maximum requests per second (0 = no limit)
             timeout: Request timeout in seconds
             retry_config: Configuration for retry logic
             totp_secret: TOTP secret key for MFA
@@ -63,11 +66,7 @@ class Executor:
         Raises:
             ValueError: If auth_type is not supported.
         """
-        self.base_url = base_url.rstrip("/")
-        
-        if auth_type not in ["bearer", "basic", "none"]:
-            raise ValueError(f"Unsupported auth_type: {auth_type}. Supported types: bearer, basic, none")
-            
+        self.base_url = base_url
         self.auth_type = auth_type
         self.auth_token = auth_token
         self.rate_limit = rate_limit
@@ -112,10 +111,26 @@ class Executor:
         # Initialize rate limiter lock
         self._rate_lock = asyncio.Lock() if self.rate_limit > 0 else None
         return self
-    
-    async def __aexit__(self, *args: Any) -> None:
-        """Context manager exit."""
-        if self._client:
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Async context manager exit."""
+        await self._close()
+
+    async def _ensure_client(self) -> None:
+        """Ensure the HTTP client is initialized."""
+        if self._client is None:
+            headers = self._build_headers()
+            self._client = httpx.AsyncClient(
+                base_url=self.base_url,
+                headers=headers,
+                timeout=self.timeout,
+            )
+            if self.rate_limit > 0:
+                self._rate_limiter = asyncio.Semaphore(int(self.rate_limit))
+
+    async def _close(self) -> None:
+        """Close the HTTP client."""
+        if self._client is not None:
             await self._client.aclose()
         
         # Close file handler to prevent resource leak
@@ -130,32 +145,54 @@ class Executor:
         
         if self.auth_type in ("bearer", "oauth") and self.auth_token:
             headers["Authorization"] = f"Bearer {self.auth_token}"
-        elif self.auth_type == "basic" and self.auth_token:
+        elif self.auth_type == "basic":
             headers["Authorization"] = f"Basic {self.auth_token}"
-        
+        elif self.auth_type == "api_key":
+            headers["X-API-Key"] = self.auth_token
         return headers
-    
+
+    async def _apply_rate_limit(self) -> None:
+        """Apply rate limiting using token bucket algorithm."""
+        if not self._rate_limiter:
+            return
+
+        # Acquire semaphore token
+        async with self._rate_limiter:
+            # Calculate time since last request
+            current_time = time.perf_counter()
+            time_since_last = current_time - self._last_request_time
+
+            # Minimum time between requests (in seconds)
+            min_interval = 1.0 / self.rate_limit if self.rate_limit > 0 else 0
+
+            # Sleep if we're going too fast
+            if time_since_last < min_interval:
+                await asyncio.sleep(min_interval - time_since_last)
+
+            # Update last request time
+            self._last_request_time = time.perf_counter()
+
     async def execute_attack(
         self,
         method: str,
         path: str,
-        payload: Optional[Dict[str, Any]] = None,
-        files: Optional[Dict[str, Any]] = None,
-        graphql_query: Optional[str] = None,
-        headers: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        payload: Optional[dict[str, Any]] = None,
+        location: str = "query",
+        headers: Optional[dict[str, str]] = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Execute an attack request.
-        
+
         Args:
             method: HTTP method (GET, POST, etc.)
             path: API endpoint path
             payload: Request body/parameters
-            files: Files to upload (for multipart/form-data)
-            graphql_query: Raw GraphQL query string (will be wrapped in JSON)
+            location: Payload location (query, body, header, cookie)
             headers: Additional headers
-            
+            **kwargs: Additional arguments for httpx
+
         Returns:
-            Response data including status, body, and timing
+            Response dict with status, body, headers, etc.
         """
         if not self._client:
             return {

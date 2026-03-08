@@ -1,0 +1,115 @@
+# Price/Discount Manipulation - Business Logic Attack Profile
+# Tests for financial manipulation vulnerabilities in pricing and discount logic
+
+name: "Price Manipulation - Discount/Price Bypass"
+category: "business-logic"
+severity: "critical"
+description: "Tests for price and discount manipulation vulnerabilities allowing financial fraud"
+attack_type: "payment"
+requires_state: false
+concurrent_requests: 1
+timing_sensitive: false
+
+# Fields related to pricing - expanded to include total, amount, cost, subtotal, fee
+target_fields:
+  - "price"
+  - "amount"
+  - "total"
+  - "cost"
+  - "subtotal"
+  - "fee"
+  - "discount"
+  - "coupon"
+  - "promo"
+  - "code"
+  - "tax"
+  - "shipping"
+  - "coupon_code"
+  - "discount_percent"
+  - "discount_amount"
+  - "currency"
+  - "quantity"
+  - "unit_price"
+  - "grand_total"
+  - "net_amount"
+  - "gross_amount"
+  - "final_price"
+  - "base_price"
+  - "service_fee"
+  - "handling_fee"
+  - "processing_fee"
+
+# Payloads for price manipulation
+payloads:
+  # Negative values
+  - "-100"
+  - "-1000"
+  - "-999999"
+  
+  # Zero values
+  - "0"
+  
+  # Decimal exploitation
+  - "0.01"
+  - "0.001"
+  - "0.0001"
+  
+  # Invalid values
+  - ""
+  - "null"
+  - "undefined"
+  
+  # Type confusion
+  - "true"
+  - "false"
+
+success_indicators:
+  # Shopping cart/order created with invalid price
+  response_contains:
+    - "success"
+    - "order.*created"
+    - "confirmed"
+  status_codes:
+    - 200  # Order processed with manipulated price
+    - 201  # Order created with invalid pricing
+  # Price validation bypassed
+
+# Define pricing validation workflow
+state_transitions:
+  - name: "cart_checkout_pricing"
+    steps:
+      - action: "POST"
+        target: "/cart/items"
+        payload: { "item_id": "item1", "quantity": 2, "price": 50.00 }
+      - action: "GET"
+        target: "/cart/total"
+        expect: "total = 100.00"
+      - action: "POST"
+        target: "/cart/apply-coupon"
+        payload: { "code": "INVALID" }
+        expect: "coupon rejected"
+      - action: "POST"
+        target: "/order/checkout"
+        payload: { "total": "0.01" }
+        should_fail: "price validation"
+
+remediation: |
+  Implement robust pricing controls:
+  - Calculate prices server-side, never trust client-provided prices
+  - Implement price validation before order processing
+  - Use absolute value checks for discounts (max 100%)
+  - Log all price changes and modifications
+  - Implement audit trails for financial transactions
+  - Use database constraints for price fields (NOT NULL, >= 0)
+  - Validate coupon/discount codes server-side
+  - Implement rate limiting on price-sensitive endpoints
+  - Require manager approval for price adjustments
+  - Use cryptographic signatures for price calculations
+  - Implement transaction reversal and refund mechanisms
+  - Regular financial audits and reconciliation
+  - Monitor for suspicious pricing patterns
+
+references:
+  - "https://owasp.org/www-community/attacks/Business_logic_attacks"
+  - "https://blog.security.merge.dev/business-logic-vulnerabilities/"
+  - "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
