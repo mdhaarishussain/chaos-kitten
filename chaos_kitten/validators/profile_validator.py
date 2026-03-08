@@ -130,7 +130,7 @@ class AttackProfileValidator:
         path = Path(toys_dir)
         
         if not path.exists():
-             return {"error": ValidationReport(is_valid=False, errors=[f"Path not found: {toys_dir}"])}
+             raise FileNotFoundError(f"Path not found: {toys_dir}")
              
         if path.is_file():
             results[path.name] = self.validate_profile(str(path))
@@ -138,6 +138,6 @@ class AttackProfileValidator:
             for file_path in path.glob('*.yaml'):
                 results[file_path.name] = self.validate_profile(str(file_path))
         else:
-             return {"error": ValidationReport(is_valid=False, errors=[f"Invalid path type: {toys_dir}"])}
+             raise ValueError(f"Invalid path type: {toys_dir}")
             
         return results
