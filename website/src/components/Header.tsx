@@ -23,8 +23,8 @@ export default function Header() {
         </Link>
         <nav className={isMobileMenuOpen ? 'active' : ''}>
             <Link href="/#features" className="nav-link" onClick={closeMobileMenu}>Features</Link>
-            <Link href="/#quickstart" className="nav-link" onClick={closeMobileMenu}>Quickstart</Link>
-            <a href="https://github.com/mdhaarishussain/chaos-kitten/blob/main/docs/getting_started.md" target="_blank" rel="noopener noreferrer" className="nav-link" onClick={closeMobileMenu}>Docs</a>
+            <Link href="/quickstart" className="nav-link" onClick={closeMobileMenu}>Quickstart</Link>
+            <Link href="/docs" className="nav-link" onClick={closeMobileMenu}>Docs</Link>
             <a href="https://github.com/mdhaarishussain/chaos-kitten" target="_blank" className="btn btn-secondary" onClick={closeMobileMenu}>
                 <i className="fab fa-github"></i> GitHub
             </a>

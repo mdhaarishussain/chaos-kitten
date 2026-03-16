@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 export default function Docs() {
   return (
     <>
+      <Header />
       <style jsx global>{`
 :root {
             --bg-main: #050712;
@@ -469,315 +472,83 @@ export default function Docs() {
         }
       `}</style>
       <div>
-<div className="shell">
-        {/* Hero section */}
-        <header className="hero">
+        <div className="shell">
+          <header className="hero">
             <div className="hero-text">
-                <div className="badge">
-                    <span className="badge-dot"></span>
-                    <span>v0.1.0 Alpha – Getting Started</span>
-                </div>
-                <h1 className="hero-title">
-                    Unleash <span className="accent">Chaos</span> on your
-                    <br />API onboarding.
-                </h1>
-                <p className="hero-subtitle">
-                    Spin up Chaos Kitten locally or in CI, wire it to your API, and let the agentic
-                    scanner go hunting for logic flaws, auth gaps, and crash‑only bugs.
-                </p>
+              <div className="badge">
+                <span className="badge-dot"></span>
+                <span>Documentation</span>
+              </div>
+              <h1 className="hero-title">
+                Chaos Kitten <span className="accent">Developer Hub</span>
+              </h1>
+              <p className="hero-subtitle">
+                Learn how to contribute, extend, and understand the internal architecture of Chaos Kitten.
+                Get started with our guides below.
+              </p>
             </div>
+          </header>
 
-            {/* Terminal card */}
-            <div className="hero-terminal">
-                <div className="terminal-header">
-                    <div className="traffic-lights">
-                        <span></span><span></span><span></span>
-                    </div>
-                    <span>chaos-kitten-cli</span>
-                    <span>zsh</span>
-                </div>
-                <div className="terminal-body">
-                    <span className="terminal-line">$ chaos-kitten scan --target http://api.local</span>
-                    <span className="terminal-line info">INFO 🧠 Brain initializing...</span>
-                    <span className="terminal-line info">INFO 📄 Parsing OpenAPI spec... 12 endpoints found.</span>
-                    <span className="terminal-line warn">WARN 🧪 Planning attack strategies...</span>
-                    <span className="terminal-line vuln">VULN 💥 Reflected XSS found at GET /users</span>
-                    <span className="terminal-line vuln">VULN 💣 SQL Injection found at POST /login</span>
-                    <span className="terminal-line success">INFO 📊 Report generated: reports/audit.html</span>
-                </div>
-            </div>
-        </header>
-
-        {/* Main content layout */}
-        <div className="layout">
+          <div className="layout">
             <div>
-                <div className="panel">
-                    <div className="panel-title">
-                        Prerequisites
-                        <span className="pill">before you start</span>
-                    </div>
-                    <ul>
-                        <li>Python 3.10 or higher</li>
-                        <li>An API to test (ideally a local dev server)</li>
-                        <li>An LLM API key (Anthropic or OpenAI)</li>
-                    </ul>
+              <div className="panel">
+                <div className="panel-title">
+                  Architecture Overview
+                  <span className="pill">Internal Design</span>
                 </div>
+                <p>Chaos Kitten is built on a modular architecture to allow easy extension of attacks and scanners.</p>
+                <ul>
+                  <li><strong>The Brain</strong>: Parses OpenAPI specs and plans attacks using LLM or heuristics.</li>
+                  <li><strong>The Paws</strong>: Executes HTTP requests against the target API with various adapters.</li>
+                  <li><strong>The Litterbox</strong>: Generates reports in multiple formats (HTML, SARIF, JSON).</li>
+                  <li><strong>Scanner</strong>: The core engine that orchestrates the entire process.</li>
+                </ul>
+              </div>
 
-                <div className="panel">
-                    <div className="panel-title">
-                        Install Chaos Kitten
-                        <span className="pill">step 1</span>
-                    </div>
-                    <p>Pick the install that matches your workflow.</p>
-
-                    <div className="section-heading">Option 1 – pip (recommended)</div>
-                    <pre><code>pip install chaos-kitten</code></pre>
-
-                    <div className="section-heading">Option 2 – From source</div>
-                    <pre><code>git clone https://github.com/mdhaarishussain/chaos-kitten.git
+              <div className="panel">
+                 <div className="panel-title">
+                    Contributing
+                    <span className="pill">Join Us</span>
+                 </div>
+                 <p>We welcome contributions! To get started with development:</p>
+                 <pre><code>git clone https://github.com/mdhaarishussain/chaos-kitten.git
 cd chaos-kitten
-pip install -e .        # standard install (no browser)
-# optional: browser exploit validation
-pip install -e .[browser]
-playwright install chromium</code></pre>
-
-                    <div className="section-heading">Option 3 – Docker (isolated)</div>
-                    <pre><code># docker compose – spins up demo API + scanner
-export ANTHROPIC_API_KEY=your_key_here
-# or: export OPENAI_API_KEY=your_key_here
-
-docker-compose up -d demo-api
-docker-compose run chaos-kitten scan --demo</code></pre>
-
-                    <pre><code># standalone docker
-docker build -t chaos-kitten .
-docker run --rm \
-  -v $(pwd)/chaos-kitten.yaml:/app/chaos-kitten.yaml \
-  -v $(pwd)/reports:/app/reports \
-  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  chaos-kitten scan</code></pre>
-                </div>
-
-                <div className="panel">
-                    <div className="panel-title">
-                        Authentication & MFA
-                        <span className="pill">optional hardening</span>
-                    </div>
-                    <p>Test MFA‑protected APIs by letting Chaos Kitten auto‑generate TOTP codes.</p>
-                    <pre><code># install MFA extra
-pip install 'chaos-kitten[mfa]'
-# or directly
-# pip install pyotp</code></pre>
-                    <pre><code>auth:
-  totp_secret: "YOUR_BASE32_SECRET_HERE"
-  totp_endpoint: "/api/mfa"
-  totp_field: "code"</code></pre>
-                </div>
+pip install -e '.[dev]'
+pytest</code></pre>
+                 <p>See <a href="https://github.com/mdhaarishussain/chaos-kitten/blob/main/CONTRIBUTING.md" className="link-inline">CONTRIBUTING.md</a> for more details.</p>
+              </div>
             </div>
 
             <div>
-                <div className="panel">
-                    <div className="panel-title">
-                        Quickstart workflow
-                        <span className="pill">step 2</span>
-                    </div>
+               <div className="panel">
+                  <div className="panel-title">
+                     Project Structure
+                     <span className="pill">File Tree</span>
+                  </div>
+                  <ul>
+                    <li><code>chaos_kitten/brain/</code>: Planning logic & strategies</li>
+                    <li><code>chaos_kitten/paws/</code>: Network execution</li>
+                    <li><code>chaos_kitten/litterbox/</code>: Reporting modules</li>
+                    <li><code>website/</code>: This documentation site</li>
+                    <li><code>tests/</code>: Comprehensive test suite</li>
+                  </ul>
+               </div>
 
-                    <div className="steps">
-                        <div className="step-card">
-                            <div className="step-label">step 1</div>
-                            <div className="step-title">Initialize config</div>
-                            <p>Bootstrap a fresh <code>chaos-kitten.yaml</code>.</p>
-                            <pre><code>chaos-kitten init</code></pre>
-                        </div>
-
-                        <div className="step-card">
-                            <div className="step-label">step 2</div>
-                            <div className="step-title">Wire your API</div>
-                            <pre><code>target:
-  base_url: "http://localhost:3000"
-  openapi_spec: "./openapi.json"
-
-agent:
-  llm_provider: "anthropic"
-  model: "claude-3-5-sonnet-20241022"</code></pre>
-                        </div>
-
-                        <div className="step-card">
-                            <div className="step-label">step 3</div>
-                            <div className="step-title">Set API key</div>
-                            <pre><code>export ANTHROPIC_API_KEY=your_key_here</code></pre>
-                        </div>
-
-                        <div className="step-card">
-                            <div className="step-label">step 4</div>
-                            <div className="step-title">Run a scan</div>
-                            <pre><code>chaos-kitten scan</code></pre>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="panel">
-                    <div className="panel-title">
-                        Chaos Mode
-                        <span className="pill">negative testing</span>
-                    </div>
-                    <p>Turn on chaos to hammer your API with type flips, extreme boundaries, nulls, and Unicode edge
-                        cases.</p>
-                    <pre><code># payment / crash‑hunting
-chaos-kitten scan --chaos --target http://localhost:5000
-
-# access control
-chaos-kitten scan --goal \
-  "I want to check if admin endpoints are accessible to regular users"
-
-# authentication takeover
-chaos-kitten scan --goal \
-  "test the authentication system for account takeover risks"
-
-# maximum carnage
-chaos-kitten scan --chaos --chaos-level 5 --target http://localhost:5000</code></pre>
-
-                    <div className="section-heading">Chaos levels</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Level</th>
-                                <th>Mode</th>
-                                <th>What it does</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td><span className="pill-level"><span className="dot" style={{color: '#60a5fa'}}></span>1</span>
-                                </td>
-                                <td>Gentle</td>
-                                <td>Basic type mismatches</td>
-                            </tr>
-                            <tr>
-                                <td><span className="pill-level"><span className="dot" style={{color: '#22e6ff'}}></span>2</span>
-                                </td>
-                                <td>Moderate</td>
-                                <td>Boundary values and nulls</td>
-                            </tr>
-                            <tr>
-                                <td><span className="pill-level"><span className="dot" style={{color: '#f97373'}}></span>3</span>
-                                </td>
-                                <td>Aggressive</td>
-                                <td>Unicode, control chars, and large payloads</td>
-                            </tr>
-                            <tr>
-                                <td><span className="pill-level"><span className="dot" style={{color: '#fb923c'}}></span>4</span>
-                                </td>
-                                <td>Destructive</td>
-                                <td>Overflow, injections, nested attacks</td>
-                            </tr>
-                            <tr>
-                                <td><span className="pill-level"><span className="dot" style={{color: '#a855f7'}}></span>5</span>
-                                </td>
-                                <td>Maximum carnage</td>
-                                <td>All of the above combined</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div className="panel">
-                    <div className="panel-title">
-                        Reading results
-                        <span className="pill">severity model</span>
-                    </div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Level</th>
-                                <th>Icon</th>
-                                <th>Meaning</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td className="sev-info">INFO</td>
-                                <td>🔵</td>
-                                <td>Informational finding / context signal</td>
-                            </tr>
-                            <tr>
-                                <td className="sev-critical">CRITICAL</td>
-                                <td>🔴</td>
-                                <td>Immediate action required</td>
-                            </tr>
-                            <tr>
-                                <td className="sev-high">HIGH</td>
-                                <td>🟠</td>
-                                <td>Should be fixed soon</td>
-                            </tr>
-                            <tr>
-                                <td className="sev-medium">MEDIUM</td>
-                                <td>🟡</td>
-                                <td>Should be addressed</td>
-                            </tr>
-                            <tr>
-                                <td className="sev-low">LOW</td>
-                                <td>🟢</td>
-                                <td>Minor issues</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <div className="section-heading">Sample CLI output</div>
-                    <pre><code>🐱 Chaos Kitten v1.0.0
-📋 Parsing OpenAPI spec...
-🎯 Found 12 endpoints
-
-🐾 Testing /api/login
-  ⚠️  I knocked this vase over! (SQL Injection)
-  Severity: CRITICAL</code></pre>
-                </div>
-
-                <div className="panel">
-                    <div className="panel-title">
-                        CI / CD wiring
-                        <span className="pill">pipelines</span>
-                    </div>
-                    <p>Use JUnit or SARIF in GitHub / GitLab so security findings fail builds automatically.</p>
-                    <pre><code># GitLab example
-security_scan:
-  image: python:3.12
-  script:
-    - pip install chaos-kitten
-    - chaos-kitten scan --target $STAGING_URL \
-        --format junit --output reports \
-        --fail-on high --silent
-  artifacts:
-    reports:
-      junit: reports/*.xml</code></pre>
-
-                    <pre><code># Useful CLI flags
---format sarif   # GitHub Advanced Security
---format junit   # CI test parsers
---fail-on high   # exit 1 on high+ vulns
---silent         # quiet mode for logs</code></pre>
-
-                    <p style={{fontSize: '12px', marginTop: '8px'}}>
-                        Need help? Open an
-                        <a className="link-inline" href="https://github.com/mdhaarishussain/chaos-kitten/issues">
-                            Issue
-                        </a>
-                        or jump into
-                        <a className="link-inline" href="https://github.com/mdhaarishussain/chaos-kitten/discussions">
-                            Discussions
-                        </a>.
-                    </p>
-                </div>
+               <div className="panel">
+                  <div className="panel-title">
+                     Resources
+                  </div>
+                  <ul>
+                    <li><Link href="/quickstart" className="link-inline">Getting Started / Quickstart</Link></li>
+                    <li><a href="https://github.com/mdhaarishussain/chaos-kitten" className="link-inline">GitHub Repository</a></li>
+                    <li><a href="https://github.com/mdhaarishussain/chaos-kitten/issues" className="link-inline">Report an Issue</a></li>
+                  </ul>
+               </div>
             </div>
+          </div>
         </div>
-    </div>
-
-    {/* Go back button uses browser history */}
-    <script>
-        // you can customize behavior here if needed
-    </script>
       </div>
+      <Footer />
     </>
   );
 }
